@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package aiops;
+
+option go_package = "aiops/api/proto";
+
+import "common.proto";
+
+// RootCauseService handles root cause analysis
+
+service RootCauseService {
+  rpc Analyze(RCARequest) returns (RCAResponse);
+}
+
+message RCARequest {
+  int64 incident_id = 1;
+  string title = 2;
+  string description = 3;
+  repeated string affected_services = 4;
+  repeated string affected_hosts = 5;
+  TimeRange time_range = 6;
+}
+
+message RCAResponse {
+  repeated RootCauseCandidate candidates = 1;
+  string causal_graph = 2;  // JSON: graph structure
+}
+
+message RootCauseCandidate {
+  string cause = 1;
+  double confidence = 2;   // 0.0 - 1.0
+  string evidence = 3;     // supporting evidence
+  repeated string related_metrics = 4;
+  repeated string related_logs = 5;
+}

@@ -1,0 +1,27 @@
+# API Gateway Configuration
+server:
+  host: 0.0.0.0
+  port: 8080
+  read_timeout: 30s
+  write_timeout: 30s
+
+auth:
+  jwt_secret: "${JWT_SECRET}"
+  token_expiry: 24h
+
+rate_limit:
+  enabled: true
+  requests_per_second: 100
+  burst: 200
+
+upstream:
+  query_service: "http://localhost:8081"
+  alert_service: "http://localhost:8082"
+  admin_service: "http://localhost:8083"
+  collector_service: "http://localhost:8084"
+  job_service: "http://localhost:8085"
+
+log:
+  level: info
+  format: json
+  output: stdout

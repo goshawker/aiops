@@ -1,0 +1,23 @@
+# Job Engine Configuration
+server:
+  host: 0.0.0.0
+  port: 8085
+
+database:
+  driver: sqlite
+  dsn: aiops.db
+
+executor:
+  ssh:
+    timeout: 30s
+    key_path: ~/.ssh/id_rsa
+  ansible:
+    playbook_path: /opt/aiops/playbooks
+
+workflow:
+  max_concurrent: 10
+  step_timeout: 300s
+
+log:
+  level: info
+  format: json

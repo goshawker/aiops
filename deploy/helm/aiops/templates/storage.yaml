@@ -1,0 +1,217 @@
+# VictoriaMetrics
+{{- if .Values.victoriaMetrics.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: victoria-metrics
+  labels:
+    {{- include "aiops.labels" . | nindent 4 }}
+    app.kubernetes.io/component: victoria-metrics
+spec:
+  serviceName: victoria-metrics
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: victoria-metrics
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: victoria-metrics
+    spec:
+      containers:
+        - name: victoria-metrics
+          image: "{{ .Values.victoriaMetrics.image.repository }}:{{ .Values.victoriaMetrics.image.tag }}"
+          ports:
+            - containerPort: 8428
+          args:
+            - "--retentionPeriod=30d"
+            - "--storageDataPath=/victoria-metrics-data"
+          volumeMounts:
+            - name: data
+              mountPath: /victoria-metrics-data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.victoriaMetrics.storage }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: victoria-metrics
+  labels:
+    {{- include "aiops.labels" . | nindent 4 }}
+spec:
+  ports:
+    - port: {{ .Values.victoriaMetrics.service.port }}
+      targetPort: 8428
+  selector:
+    app.kubernetes.io/name: victoria-metrics
+{{- end }}
+
+# ClickHouse
+{{- if .Values.clickhouse.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: clickhouse
+  labels:
+    {{- include "aiops.labels" . | nindent 4 }}
+spec:
+  serviceName: clickhouse
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: clickhouse
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: clickhouse
+    spec:
+      containers:
+        - name: clickhouse
+          image: "{{ .Values.clickhouse.image.repository }}:{{ .Values.clickhouse.image.tag }}"
+          ports:
+            - containerPort: 8123
+            - containerPort: 9000
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/clickhouse
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.clickhouse.storage }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: clickhouse
+  labels:
+    {{- include "aiops.labels" . | nindent 4 }}
+spec:
+  ports:
+    - port: {{ .Values.clickhouse.service.port }}
+      targetPort: 8123
+    - port: 9000
+      targetPort: 9000
+  selector:
+    app.kubernetes.io/name: clickhouse
+{{- end }}
+
+# Kafka + ZooKeeper
+{{- if .Values.kafka.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+  labels:
+    {{- include "aiops.labels" . | nindent 4 }}
+spec:
+  serviceName: kafka
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kafka
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kafka
+    spec:
+      containers:
+        - name: kafka
+          image: "{{ .Values.kafka.image.repository }}:{{ .Values.kafka.image.tag }}"
+          ports:
+            - containerPort: 9092
+          env:
+            - name: KAFKA_CFG_ZOOKEEPER_CONNECT
+              value: zookeeper:2181
+            - name: KAFKA_CFG_LISTENERS
+              value: PLAINTEXT://:9092
+            - name: KAFKA_CFG_ADVERTISED_LISTENERS
+              value: PLAINTEXT://kafka:9092
+            - name: ALLOW_PLAINTEXT_LISTENER
+              value: "yes"
+          volumeMounts:
+            - name: data
+              mountPath: /bitnami/kafka
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.kafka.storage }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  labels:
+    {{- include "aiops.labels" . | nindent 4 }}
+spec:
+  ports:
+    - port: 9092
+      targetPort: 9092
+  selector:
+    app.kubernetes.io/name: kafka
+{{- end }}
+
+{{- if .Values.zookeeper.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: zookeeper
+  labels:
+    {{- include "aiops.labels" . | nindent 4 }}
+spec:
+  serviceName: zookeeper
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: zookeeper
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: zookeeper
+    spec:
+      containers:
+        - name: zookeeper
+          image: "{{ .Values.zookeeper.image.repository }}:{{ .Values.zookeeper.image.tag }}"
+          ports:
+            - containerPort: 2181
+          env:
+            - name: ALLOW_ANONYMOUS_LOGIN
+              value: "yes"
+          volumeMounts:
+            - name: data
+              mountPath: /bitnami/zookeeper
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.zookeeper.storage }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper
+  labels:
+    {{- include "aiops.labels" . | nindent 4 }}
+spec:
+  ports:
+    - port: 2181
+      targetPort: 2181
+  selector:
+    app.kubernetes.io/name: zookeeper
+{{- end }}

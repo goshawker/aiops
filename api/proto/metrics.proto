@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package aiops;
+
+option go_package = "aiops/api/proto";
+
+import "common.proto";
+
+// MetricsQueryService handles metric queries (proxy to VictoriaMetrics)
+
+service MetricsQueryService {
+  // Instant query (single point in time)
+  rpc QueryInstant(InstantQueryRequest) returns (QueryResponse);
+  // Range query (time series)
+  rpc QueryRange(RangeQueryRequest) returns (QueryResponse);
+}
+
+message InstantQueryRequest {
+  string query = 1;  // PromQL expression
+  string time = 2;   // RFC3339 timestamp (optional, defaults to now)
+}
+
+message RangeQueryRequest {
+  string query = 1;   // PromQL expression
+  TimeRange time_range = 2;
+  string step = 3;    // e.g. "15s", "1m"
+}
+
+message QueryResponse {
+  string status = 1;        // success, error
+  string error = 2;
+  repeated MetricSeries result = 3;
+}
+
+message MetricSeries {
+  Labels labels = 1;
+  repeated DataPoint values = 2;
+}
+
+message DataPoint {
+  int64 timestamp = 1;  // unix seconds
+  double value = 2;
+}

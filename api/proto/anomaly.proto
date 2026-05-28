@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package aiops;
+
+option go_package = "aiops/api/proto";
+
+import "common.proto";
+
+// AnomalyService handles anomaly detection
+
+service AnomalyService {
+  rpc Detect(AnomalyDetectRequest) returns (AnomalyDetectResponse);
+  rpc SetThreshold(SetThresholdRequest) returns (ActionResponse);
+}
+
+message AnomalyDetectRequest {
+  string metric_name = 1;
+  double value = 2;
+  Labels labels = 3;
+  int64 timestamp = 4;
+}
+
+message AnomalyDetectResponse {
+  bool is_anomaly = 1;
+  AnomalyResult result = 2;
+}
+
+message AnomalyResult {
+  string metric_name = 1;
+  double value = 2;
+  double threshold = 3;
+  string anomaly_type = 4;  // spike, drop, threshold, high_variance
+  string severity = 5;      // critical, warning, info
+  double confidence = 6;    // 0.0 - 1.0
+  string message = 7;
+}
+
+message SetThresholdRequest {
+  string metric_name = 1;
+  Labels labels = 2;
+  string op = 3;    // >, >=, <, <=
+  double value = 4;
+}

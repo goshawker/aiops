@@ -1,0 +1,14 @@
+apiVersion: v2
+name: aiops
+description: AIOps 智能运维平台 Helm Chart
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - aiops
+  - monitoring
+  - observability
+  - anomaly-detection
+home: https://github.com/user/aiops
+maintainers:
+  - name: AIOps Team

@@ -1,0 +1,17 @@
+# Collector Service Configuration
+server:
+  host: 0.0.0.0
+  port: 8084
+
+database:
+  driver: sqlite
+  dsn: aiops.db
+
+agent:
+  heartbeat_interval: 30s
+  heartbeat_timeout: 90s
+  config_poll_interval: 60s
+
+log:
+  level: info
+  format: json

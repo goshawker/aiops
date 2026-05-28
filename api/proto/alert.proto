@@ -1,0 +1,84 @@
+syntax = "proto3";
+
+package aiops;
+
+option go_package = "aiops/api/proto";
+
+import "common.proto";
+
+// AlertService handles alert events and incidents
+
+service AlertService {
+  rpc ListEvents(ListEventsRequest) returns (ListEventsResponse);
+  rpc ListIncidents(ListIncidentsRequest) returns (ListIncidentsResponse);
+  rpc AcknowledgeIncident(IncidentActionRequest) returns (ActionResponse);
+  rpc ResolveIncident(IncidentActionRequest) returns (ActionResponse);
+}
+
+message ListEventsRequest {
+  int64 tenant_id = 1;
+  string status = 2;  // firing, resolved, suppressed
+  Pagination pagination = 3;
+}
+
+message ListEventsResponse {
+  repeated AlertEvent events = 1;
+  int64 total = 2;
+}
+
+message AlertEvent {
+  int64 id = 1;
+  int64 tenant_id = 2;
+  int64 rule_id = 3;
+  string rule_name = 4;
+  string source_type = 5;  // metric, log, agent
+  string source = 6;
+  string host = 7;
+  string service = 8;
+  string severity = 9;    // critical, warning, info
+  string title = 10;
+  string message = 11;
+  string value = 12;
+  string threshold = 13;
+  Labels labels = 14;
+  string status = 15;     // firing, resolved, suppressed
+  int64 incident_id = 16;
+  string fired_at = 17;
+  string resolved_at = 18;
+}
+
+message ListIncidentsRequest {
+  int64 tenant_id = 1;
+  string status = 2;  // open, acknowledged, resolved, closed
+  Pagination pagination = 3;
+}
+
+message ListIncidentsResponse {
+  repeated Incident incidents = 1;
+  int64 total = 2;
+}
+
+message Incident {
+  int64 id = 1;
+  int64 tenant_id = 2;
+  string title = 3;
+  string description = 4;
+  string severity = 5;
+  repeated string affected_services = 6;
+  repeated string affected_hosts = 7;
+  int32 event_count = 8;
+  string ai_summary = 9;
+  string root_cause = 10;
+  string status = 11;
+  int64 assigned_to = 12;
+  string created_at = 13;
+}
+
+message IncidentActionRequest {
+  int64 id = 1;
+}
+
+message ActionResponse {
+  string status = 1;
+  string message = 2;
+}

@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package aiops;
+
+option go_package = "aiops/api/proto";
+
+import "common.proto";
+
+// LogQueryService handles log queries (ClickHouse)
+
+service LogQueryService {
+  rpc SearchLogs(LogSearchRequest) returns (LogSearchResponse);
+  rpc GetLogById(LogIdRequest) returns (LogEntry);
+}
+
+message LogSearchRequest {
+  string query = 1;       // search keyword
+  string service = 2;     // filter by service
+  string host = 3;        // filter by host
+  string level = 4;       // INFO, WARN, ERROR, FATAL
+  string trace_id = 5;    // filter by trace ID
+  TimeRange time_range = 6;
+  Pagination pagination = 7;
+}
+
+message LogSearchResponse {
+  repeated LogEntry entries = 1;
+  int64 total = 2;
+}
+
+message LogEntry {
+  int64 timestamp = 1;     // unix milliseconds
+  string level = 2;
+  string service = 3;
+  string host = 4;
+  string message = 5;
+  string trace_id = 6;
+  string span_id = 7;
+  map<string, string> attributes = 8;
+}
+
+message LogIdRequest {
+  string id = 1;
+}

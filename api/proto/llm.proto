@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package aiops;
+
+option go_package = "aiops/api/proto";
+
+import "common.proto";
+
+// LLMService handles AI health summaries and chat
+
+service LLMService {
+  rpc GenerateSummary(SummaryRequest) returns (SummaryResponse);
+  rpc Chat(ChatRequest) returns (ChatResponse);
+}
+
+message SummaryRequest {
+  repeated MetricSnapshot metrics = 1;
+  LogSummary log_summary = 2;
+  repeated IncidentSummary incidents = 3;
+}
+
+message MetricSnapshot {
+  string name = 1;
+  double value = 2;
+  string unit = 3;
+  double change_pct = 4;  // % change over last hour
+  string host = 5;
+  string service = 6;
+}
+
+message LogSummary {
+  int32 total_count = 1;
+  int32 error_count = 2;
+  int32 warn_count = 3;
+  repeated string top_errors = 4;
+}
+
+message IncidentSummary {
+  string severity = 1;
+  string title = 2;
+}
+
+message SummaryResponse {
+  string status = 1;      // normal, warning, critical
+  string summary = 2;     // one-line Chinese summary
+  repeated string details = 3;
+  repeated string recommendations = 4;
+  string source = 5;      // rule_engine, qwen2-1.5b
+}
+
+message ChatRequest {
+  string message = 1;
+  string session_id = 2;
+  repeated ChatMessage history = 3;
+}
+
+message ChatMessage {
+  string role = 1;    // user, assistant
+  string content = 2;
+}
+
+message ChatResponse {
+  string response = 1;
+  string source = 2;  // rule_engine, qwen2-1.5b
+}

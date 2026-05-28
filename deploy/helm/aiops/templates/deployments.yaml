@@ -1,0 +1,24 @@
+# Go Services
+{{- if .Values.gateway.enabled }}
+{{- include "aiops.goService" (list "gateway" .) }}
+{{- end }}
+
+{{- if .Values.query.enabled }}
+{{- include "aiops.goService" (list "query" .) }}
+{{- end }}
+
+{{- if .Values.alert.enabled }}
+{{- include "aiops.goService" (list "alert" .) }}
+{{- end }}
+
+{{- if .Values.admin.enabled }}
+{{- include "aiops.goService" (list "admin" .) }}
+{{- end }}
+
+{{- if .Values.collector.enabled }}
+{{- include "aiops.goService" (list "collector" .) }}
+{{- end }}
+
+{{- if .Values.job.enabled }}
+{{- include "aiops.goService" (list "job" .) }}
+{{- end }}

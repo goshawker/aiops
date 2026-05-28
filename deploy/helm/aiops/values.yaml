@@ -1,0 +1,207 @@
+# AIOps Platform - Helm Values
+
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+
+# ──────────────────────────────────────
+# Go Services
+# ──────────────────────────────────────
+gateway:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: aiops/gateway
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8080
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+query:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: aiops/query
+    tag: latest
+  service:
+    port: 8081
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+alert:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: aiops/alert
+    tag: latest
+  service:
+    port: 8082
+
+admin:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: aiops/admin
+    tag: latest
+  service:
+    port: 8083
+
+collector:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: aiops/collector
+    tag: latest
+  service:
+    port: 8084
+
+job:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: aiops/job
+    tag: latest
+  service:
+    port: 8085
+
+# ──────────────────────────────────────
+# Python AI Services
+# ──────────────────────────────────────
+anomaly:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: aiops/anomaly
+    tag: latest
+  service:
+    port: 5001
+
+alertAgg:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: aiops/alert-agg
+    tag: latest
+  service:
+    port: 5003
+
+llm:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: aiops/llm
+    tag: latest
+  service:
+    port: 5004
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+
+rca:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: aiops/rca
+    tag: latest
+  service:
+    port: 5005
+
+# ──────────────────────────────────────
+# Frontend
+# ──────────────────────────────────────
+web:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: aiops/web
+    tag: latest
+  service:
+    type: ClusterIP
+    port: 80
+
+# ──────────────────────────────────────
+# Storage
+# ──────────────────────────────────────
+victoriaMetrics:
+  enabled: true
+  image:
+    repository: victoriametrics/victoria-metrics
+    tag: v1.106.1
+  storage: 10Gi
+  service:
+    port: 8428
+
+clickhouse:
+  enabled: true
+  image:
+    repository: clickhouse/clickhouse-server
+    tag: "24.10"
+  storage: 20Gi
+  service:
+    port: 8123
+
+kafka:
+  enabled: true
+  image:
+    repository: bitnami/kafka
+    tag: "3.8"
+  storage: 10Gi
+  service:
+    port: 9092
+
+zookeeper:
+  enabled: true
+  image:
+    repository: bitnami/zookeeper
+    tag: "3.9"
+  storage: 5Gi
+
+nebula:
+  enabled: false
+  image:
+    repository: vesoft/nebula-graphd
+    tag: v3.8.0
+  storage: 10Gi
+
+# ──────────────────────────────────────
+# Monitoring
+# ──────────────────────────────────────
+nodeExporter:
+  enabled: true
+  image:
+    repository: prom/node-exporter
+    tag: v1.8.2
+
+# ──────────────────────────────────────
+# Ingress
+# ──────────────────────────────────────
+ingress:
+  enabled: false
+  className: nginx
+  annotations: {}
+  hosts:
+    - host: aiops.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# ──────────────────────────────────────
+# Config
+# ──────────────────────────────────────
+config:
+  kafka:
+    brokers: "kafka:9092"
+  sqlite:
+    path: "/data/aiops.db"
