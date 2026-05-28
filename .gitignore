@@ -1,12 +1,12 @@
 # Binaries
 bin/
-alert
-gateway
-collector
-query
-job
-admin
-agent
+/alert
+/gateway
+/collector
+/query
+/job
+/admin
+/agent
 *.exe
 *.exe~
 *.dll
