@@ -1,0 +1,76 @@
+syntax = "proto3";
+
+package aiops;
+
+option go_package = "aiops/api/proto";
+
+import "common.proto";
+
+// CollectorService handles agent management
+
+service CollectorService {
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+  rpc ListCollectors(ListCollectorsRequest) returns (ListCollectorsResponse);
+  rpc GetConfig(GetCollectorConfigRequest) returns (CollectorConfigResponse);
+}
+
+message RegisterRequest {
+  string hostname = 1;
+  string ip = 2;
+  string os = 3;
+  string arch = 4;       // amd64, arm64
+  string agent_version = 5;
+  Labels labels = 6;
+}
+
+message RegisterResponse {
+  int64 collector_id = 1;
+  string config = 2;     // JSON config to apply
+  string status = 3;
+}
+
+message HeartbeatRequest {
+  int64 collector_id = 1;
+  string hostname = 2;
+  string status = 3;     // online, error
+  string config_hash = 4;
+}
+
+message HeartbeatResponse {
+  bool need_update = 1;   // true if config changed
+  string new_config = 2;  // JSON if need_update=true
+}
+
+message ListCollectorsRequest {
+  int64 tenant_id = 1;
+  string status = 2;  // online, offline, error
+  Pagination pagination = 3;
+}
+
+message ListCollectorsResponse {
+  repeated Collector collectors = 1;
+  int64 total = 2;
+}
+
+message Collector {
+  int64 id = 1;
+  string hostname = 2;
+  string ip = 3;
+  string os = 4;
+  string arch = 5;
+  string agent_version = 6;
+  string status = 7;
+  string last_heartbeat = 8;
+  Labels labels = 9;
+}
+
+message GetCollectorConfigRequest {
+  int64 collector_id = 1;
+  string config_hash = 2;
+}
+
+message CollectorConfigResponse {
+  string config = 1;   // JSON config
+  string hash = 2;
+}

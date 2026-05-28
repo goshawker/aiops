@@ -1,0 +1,27 @@
+# Query Service Configuration
+server:
+  host: 0.0.0.0
+  port: 8081
+
+victoria_metrics:
+  url: "http://localhost:8428"
+  timeout: 30s
+
+clickhouse:
+  host: localhost
+  port: 9000
+  database: aiops
+  username: default
+  password: ""
+  max_open_conns: 10
+  max_idle_conns: 5
+
+kafka:
+  brokers:
+    - localhost:9092
+  topic_metrics: aiops.metrics
+  topic_logs: aiops.logs
+
+log:
+  level: info
+  format: json

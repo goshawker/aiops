@@ -1,0 +1,11 @@
+# Admin Service Configuration
+server:
+  host: 0.0.0.0
+  port: 8083
+
+sqlite:
+  path: aiops.db
+
+log:
+  level: info
+  format: json

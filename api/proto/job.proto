@@ -1,0 +1,91 @@
+syntax = "proto3";
+
+package aiops;
+
+option go_package = "aiops/api/proto";
+
+import "common.proto";
+
+// JobService handles job execution and workflow orchestration
+
+service JobService {
+  rpc ListJobs(ListJobsRequest) returns (ListJobsResponse);
+  rpc CreateJob(CreateJobRequest) returns (Job);
+  rpc ExecuteJob(ExecuteJobRequest) returns (ExecuteJobResponse);
+  rpc ListExecutions(ListExecutionsRequest) returns (ListExecutionsResponse);
+}
+
+message ListJobsRequest {
+  int64 tenant_id = 1;
+  string job_type = 2;  // shell, python, ansible
+  Pagination pagination = 3;
+}
+
+message ListJobsResponse {
+  repeated Job jobs = 1;
+  int64 total = 2;
+}
+
+message Job {
+  int64 id = 1;
+  string name = 2;
+  string description = 3;
+  string job_type = 4;    // shell, python, ansible
+  string script = 5;
+  repeated JobParam params = 6;
+  int32 timeout = 7;
+  bool need_approval = 8;
+  bool enabled = 9;
+  string created_at = 10;
+}
+
+message JobParam {
+  string name = 1;
+  string type = 2;      // string, number, boolean
+  bool required = 3;
+  string default_value = 4;
+}
+
+message CreateJobRequest {
+  string name = 1;
+  string description = 2;
+  string job_type = 3;
+  string script = 4;
+  repeated JobParam params = 5;
+  int32 timeout = 6;
+  bool need_approval = 7;
+}
+
+message ExecuteJobRequest {
+  int64 job_id = 1;
+  map<string, string> params = 2;
+  string target_host = 3;
+}
+
+message ExecuteJobResponse {
+  int64 execution_id = 1;
+  string status = 2;
+}
+
+message ListExecutionsRequest {
+  int64 job_id = 1;
+  string status = 2;
+  Pagination pagination = 3;
+}
+
+message ListExecutionsResponse {
+  repeated JobExecution executions = 1;
+  int64 total = 2;
+}
+
+message JobExecution {
+  int64 id = 1;
+  int64 job_id = 2;
+  string target_host = 3;
+  string status = 4;    // pending, running, success, failed, timeout
+  int32 exit_code = 5;
+  string output = 6;
+  string error = 7;
+  string started_at = 8;
+  string finished_at = 9;
+}

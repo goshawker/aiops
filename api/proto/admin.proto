@@ -1,0 +1,110 @@
+syntax = "proto3";
+
+package aiops;
+
+option go_package = "aiops/api/proto";
+
+import "common.proto";
+
+// AdminService handles user management, RBAC, config, audit
+
+service AdminService {
+  // Users
+  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse);
+  rpc CreateUser(CreateUserRequest) returns (User);
+  rpc UpdateUser(UpdateUserRequest) returns (User);
+  rpc DeleteUser(DeleteUserRequest) returns (ActionResponse);
+
+  // Config
+  rpc GetConfig(GetConfigRequest) returns (ConfigValue);
+  rpc SetConfig(SetConfigRequest) returns (ActionResponse);
+
+  // Audit
+  rpc ListAuditLogs(ListAuditLogsRequest) returns (ListAuditLogsResponse);
+}
+
+message ListUsersRequest {
+  int64 tenant_id = 1;
+  Pagination pagination = 2;
+}
+
+message ListUsersResponse {
+  repeated User users = 1;
+  int64 total = 2;
+}
+
+message User {
+  int64 id = 1;
+  string username = 2;
+  string real_name = 3;
+  string email = 4;
+  string role = 5;    // admin, operator, viewer
+  string status = 6;  // active, disabled
+  string created_at = 7;
+}
+
+message CreateUserRequest {
+  string username = 1;
+  string password = 2;
+  string real_name = 3;
+  string email = 4;
+  string role = 5;
+}
+
+message UpdateUserRequest {
+  int64 id = 1;
+  string real_name = 2;
+  string email = 3;
+  string role = 4;
+  string status = 5;
+}
+
+message DeleteUserRequest {
+  int64 id = 1;
+}
+
+message GetConfigRequest {
+  int64 tenant_id = 1;
+  string category = 2;
+  string key = 3;
+}
+
+message ConfigValue {
+  string category = 1;
+  string key = 2;
+  string value = 3;
+  string description = 4;
+}
+
+message SetConfigRequest {
+  int64 tenant_id = 1;
+  string category = 2;
+  string key = 3;
+  string value = 4;
+}
+
+message ListAuditLogsRequest {
+  int64 tenant_id = 1;
+  string user_id = 2;
+  string action = 3;
+  string resource = 4;
+  TimeRange time_range = 5;
+  Pagination pagination = 6;
+}
+
+message ListAuditLogsResponse {
+  repeated AuditLog logs = 1;
+  int64 total = 2;
+}
+
+message AuditLog {
+  int64 id = 1;
+  int64 user_id = 2;
+  string username = 3;
+  string action = 4;    // create, update, delete, login, logout, execute
+  string resource = 5;  // user, alert_rule, job, collector, config
+  string resource_id = 6;
+  string detail = 7;    // JSON
+  string ip = 8;
+  string created_at = 9;
+}

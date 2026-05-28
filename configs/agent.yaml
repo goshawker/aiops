@@ -1,0 +1,5 @@
+# AIOps Host Agent Configuration
+collector_url: "http://localhost:8084"
+agent_name: "${HOSTNAME}"
+interval: 30s
+tags: '{"env":"prod"}'
