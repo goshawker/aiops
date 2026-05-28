@@ -1,0 +1,74 @@
+-- NebulaGraph Seed Data for AIOps Platform
+
+USE aiops;
+
+-- ============================================
+-- Hosts
+-- ============================================
+INSERT VERTEX host (hostname, ip, os, arch, cpu_cores, memory_gb, created_at)
+VALUES
+  "host-web-01"   -> ("web-01",   "192.168.1.10", "Kylin V10",  "x86_64", 8,  16.0, timestamp("2024-01-01T00:00:00")),
+  "host-web-02"   -> ("web-02",   "192.168.1.11", "Kylin V10",  "x86_64", 8,  16.0, timestamp("2024-01-01T00:00:00")),
+  "host-app-01"   -> ("app-01",   "192.168.1.20", "Kylin V10",  "aarch64", 16, 32.0, timestamp("2024-01-01T00:00:00")),
+  "host-db-01"    -> ("db-01",    "192.168.1.30", "Kylin V10",  "x86_64", 16, 64.0, timestamp("2024-01-01T00:00:00")),
+  "host-mq-01"    -> ("mq-01",    "192.168.1.40", "Kylin V10",  "x86_64", 8,  16.0, timestamp("2024-01-01T00:00:00"));
+
+-- ============================================
+-- Services
+-- ============================================
+INSERT VERTEX service (name, type, version, port, endpoints, created_at)
+VALUES
+  "svc-gateway"   -> ("gateway",     "go",     "1.0.0", 8080, "http://gateway:8080",  timestamp("2024-01-01T00:00:00")),
+  "svc-query"     -> ("query",       "go",     "1.0.0", 8081, "http://query:8081",    timestamp("2024-01-01T00:00:00")),
+  "svc-alert"     -> ("alert",       "go",     "1.0.0", 8082, "http://alert:8082",    timestamp("2024-01-01T00:00:00")),
+  "svc-anomaly"   -> ("anomaly",     "python", "1.0.0", 5000, "http://anomaly:5000",  timestamp("2024-01-01T00:00:00")),
+  "svc-llm"       -> ("llm",         "python", "1.0.0", 5001, "http://llm:5001",      timestamp("2024-01-01T00:00:00")),
+  "svc-alert-agg" -> ("alert-agg",   "python", "1.0.0", 5002, "http://alert-agg:5002",timestamp("2024-01-01T00:00:00"));
+
+-- ============================================
+-- Components
+-- ============================================
+INSERT VERTEX component (name, type, version, endpoint, created_at)
+VALUES
+  "cmp-victoriametrics" -> ("VictoriaMetrics", "database",   "v1.106.1", "http://vm:8428",      timestamp("2024-01-01T00:00:00")),
+  "cmp-clickhouse"      -> ("ClickHouse",      "database",   "v24.3",    "http://clickhouse:8123", timestamp("2024-01-01T00:00:00")),
+  "cmp-kafka"           -> ("Kafka",           "queue",      "v3.7",     "kafka:9092",          timestamp("2024-01-01T00:00:00")),
+  "cmp-sqlite"          -> ("SQLite",          "database",   "v3.45",    "local",               timestamp("2024-01-01T00:00:00")),
+  "cmp-nebula"          -> ("NebulaGraph",     "database",   "v3.8",     "nebula:9669",         timestamp("2024-01-01T00:00:00"));
+
+-- ============================================
+-- Host → Service (runs)
+-- ============================================
+INSERT EDGE runs (port, pid, started_at)
+VALUES
+  "host-app-01" -> "svc-gateway" @0: (8080, 1001, timestamp("2024-01-01T00:00:00")),
+  "host-app-01" -> "svc-query"   @0: (8081, 1002, timestamp("2024-01-01T00:00:00")),
+  "host-app-01" -> "svc-alert"   @0: (8082, 1003, timestamp("2024-01-01T00:00:00")),
+  "host-app-01" -> "svc-anomaly" @0: (5000, 1004, timestamp("2024-01-01T00:00:00")),
+  "host-app-01" -> "svc-llm"     @0: (5001, 1005, timestamp("2024-01-01T00:00:00")),
+  "host-app-01" -> "svc-alert-agg" @0: (5002, 1006, timestamp("2024-01-01T00:00:00"));
+
+-- ============================================
+-- Service → Service (depends_on)
+-- ============================================
+INSERT EDGE depends_on (type, endpoint, critical)
+VALUES
+  "svc-gateway" -> "svc-query"    @0: ("http", "http://query:8081",    true),
+  "svc-gateway" -> "svc-alert"    @0: ("http", "http://alert:8082",    true),
+  "svc-gateway" -> "svc-anomaly"  @0: ("http", "http://anomaly:5000",  false),
+  "svc-gateway" -> "svc-llm"      @0: ("http", "http://llm:5001",      false),
+  "svc-alert"   -> "svc-alert-agg" @0: ("kafka", "kafka:9092",         true),
+  "svc-anomaly" -> "svc-alert"    @0: ("kafka", "kafka:9092",          true);
+
+-- ============================================
+-- Service → Component (uses)
+-- ============================================
+INSERT EDGE uses (type, endpoint)
+VALUES
+  "svc-query"   -> "cmp-victoriametrics" @0: ("read",  "http://vm:8428"),
+  "svc-query"   -> "cmp-clickhouse"      @0: ("read",  "http://clickhouse:8123"),
+  "svc-alert"   -> "cmp-sqlite"          @0: ("readwrite", "local"),
+  "svc-alert"   -> "cmp-kafka"           @0: ("read",  "kafka:9092"),
+  "svc-anomaly" -> "cmp-kafka"           @0: ("readwrite", "kafka:9092"),
+  "svc-alert-agg" -> "cmp-kafka"         @0: ("readwrite", "kafka:9092"),
+  "svc-llm"     -> "cmp-nebula"          @0: ("read",  "nebula:9669");

@@ -1,0 +1,41 @@
+AIOps Platform deployed successfully!
+
+{{- if .Values.ingress.enabled }}
+
+Access the platform via Ingress:
+{{- range .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}
+{{- end }}
+
+{{- else if eq (.Values.web.service.type | default "ClusterIP") "NodePort" }}
+
+Get the web UI URL:
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services web)
+  export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo http://$NODE_IP:$NODE_PORT
+
+{{- else }}
+
+Access the web UI via port-forward:
+  kubectl port-forward --namespace {{ .Release.Namespace }} svc/web 8080:{{ .Values.web.service.port }}
+  Then open http://localhost:8080
+
+{{- end }}
+
+Service endpoints (internal):
+  Gateway:    gateway:{{ .Values.gateway.service.port }}
+  Query:      query:{{ .Values.query.service.port }}
+  Alert:      alert:{{ .Values.alert.service.port }}
+  Admin:      admin:{{ .Values.admin.service.port }}
+  Collector:  collector:{{ .Values.collector.service.port }}
+  Job:        job:{{ .Values.job.service.port }}
+  Anomaly:    anomaly:{{ .Values.anomaly.service.port }}
+  AlertAgg:   alertAgg:{{ .Values.alertAgg.service.port }}
+  LLM:        llm:{{ .Values.llm.service.port }}
+  RCA:        rca:{{ .Values.rca.service.port }}
+
+Storage:
+  VictoriaMetrics: victoria-metrics:{{ .Values.victoriaMetrics.service.port }}
+  ClickHouse:      clickhouse:{{ .Values.clickhouse.service.port }}
+  Kafka:           kafka:9092
+  ZooKeeper:       zookeeper:2181

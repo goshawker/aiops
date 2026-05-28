@@ -1,0 +1,127 @@
+-- NebulaGraph Schema for AIOps Platform
+-- Graph model: Host → Service → Metric → Alert
+
+-- ============================================
+-- Spaces
+-- ============================================
+CREATE SPACE IF NOT EXISTS aiops (
+  vid_type = FIXED_STRING(128),
+  partition_num = 1,
+  replica_factor = 1
+);
+
+USE aiops;
+
+-- ============================================
+-- Tags (Vertex types)
+-- ============================================
+
+-- Host: physical/virtual machine
+CREATE TAG IF NOT EXISTS host (
+  hostname string,
+  ip string,
+  os string,
+  arch string,
+  cpu_cores int,
+  memory_gb float,
+  created_at timestamp
+);
+
+-- Service: application service
+CREATE TAG IF NOT EXISTS service (
+  name string,
+  type string,          -- "go", "python", "java", etc.
+  version string,
+  port int,
+  endpoints string,     -- comma-separated URLs
+  created_at timestamp
+);
+
+-- Metric: metric definition
+CREATE TAG IF NOT EXISTS metric (
+  name string,
+  unit string,
+  description string,
+  source string,        -- "prometheus", "clickhouse", etc.
+  created_at timestamp
+);
+
+-- Alert: alert rule or event
+CREATE TAG IF NOT EXISTS alert (
+  title string,
+  severity string,      -- "critical", "warning", "info"
+  status string,        -- "firing", "resolved"
+  source string,
+  message string,
+  fired_at timestamp,
+  resolved_at timestamp
+);
+
+-- Component: infrastructure component (DB, queue, etc.)
+CREATE TAG IF NOT EXISTS component (
+  name string,
+  type string,          -- "database", "queue", "cache", "loadbalancer"
+  version string,
+  endpoint string,
+  created_at timestamp
+);
+
+-- ============================================
+-- Edge types (Relationships)
+-- ============================================
+
+-- Host runs Service
+CREATE EDGE IF NOT EXISTS runs (
+  port int,
+  pid int,
+  started_at timestamp
+);
+
+-- Service depends_on Service
+CREATE EDGE IF NOT EXISTS depends_on (
+  type string,          -- "http", "grpc", "kafka", "tcp"
+  endpoint string,
+  critical boolean      -- is this a critical dependency?
+);
+
+-- Service emits Metric
+CREATE EDGE IF NOT EXISTS emits (
+  interval string,      -- "15s", "60s"
+  labels string         -- JSON labels
+);
+
+-- Metric triggers Alert
+CREATE EDGE IF NOT EXISTS triggers (
+  condition string,     -- "value > 80"
+  threshold float,
+  created_at timestamp
+);
+
+-- Host affected_by Alert
+CREATE EDGE IF NOT EXISTS affected_by (
+  severity string,
+  started_at timestamp
+);
+
+-- Service uses Component
+CREATE EDGE IF NOT EXISTS uses (
+  type string,          -- "read", "write", "readwrite"
+  endpoint string
+);
+
+-- Host connects_to Host (network topology)
+CREATE EDGE IF NOT EXISTS connects_to (
+  latency_ms float,
+  bandwidth_mbps float
+);
+
+-- ============================================
+-- Indexes
+-- ============================================
+CREATE TAG INDEX IF NOT EXISTS idx_host_hostname ON host(hostname(64));
+CREATE TAG INDEX IF NOT EXISTS idx_host_ip ON host(ip(32));
+CREATE TAG INDEX IF NOT EXISTS idx_service_name ON service(name(64));
+CREATE TAG INDEX IF NOT EXISTS idx_metric_name ON metric(name(128));
+CREATE TAG INDEX IF NOT EXISTS idx_alert_severity ON alert(severity(16));
+CREATE TAG INDEX IF NOT EXISTS idx_alert_status ON alert(status(16));
+CREATE TAG INDEX IF NOT EXISTS idx_component_name ON component(name(64));

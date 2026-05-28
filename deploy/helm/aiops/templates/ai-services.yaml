@@ -1,0 +1,16 @@
+# Python AI Services
+{{- if .Values.anomaly.enabled }}
+{{- include "aiops.pythonService" (list "anomaly" .) }}
+{{- end }}
+
+{{- if .Values.alertAgg.enabled }}
+{{- include "aiops.pythonService" (list "alertAgg" .) }}
+{{- end }}
+
+{{- if .Values.llm.enabled }}
+{{- include "aiops.pythonService" (list "llm" .) }}
+{{- end }}
+
+{{- if .Values.rca.enabled }}
+{{- include "aiops.pythonService" (list "rca" .) }}
+{{- end }}
