@@ -27,15 +27,22 @@ type Upstream struct {
 }
 
 var upstreams = map[string]string{
-	"query":     "http://localhost:8081",
-	"alert":     "http://localhost:8082",
-	"admin":     "http://localhost:8083",
-	"collector": "http://localhost:8084",
-	"job":       "http://localhost:8085",
-	"anomaly":   "http://localhost:5001",
-	"rca":       "http://localhost:5002",
-	"alert-agg": "http://localhost:5003",
-	"llm":       "http://localhost:5004",
+	"query":     envOr("UPSTREAM_QUERY", "http://localhost:8081"),
+	"alert":     envOr("UPSTREAM_ALERT", "http://localhost:8082"),
+	"admin":     envOr("UPSTREAM_ADMIN", "http://localhost:8083"),
+	"collector": envOr("UPSTREAM_COLLECTOR", "http://localhost:8084"),
+	"job":       envOr("UPSTREAM_JOB", "http://localhost:8085"),
+	"anomaly":   envOr("UPSTREAM_ANOMALY", "http://localhost:5001"),
+	"rca":       envOr("UPSTREAM_RCA", "http://localhost:5002"),
+	"alert-agg": envOr("UPSTREAM_ALERT_AGG", "http://localhost:5003"),
+	"llm":       envOr("UPSTREAM_LLM", "http://localhost:5004"),
+}
+
+func envOr(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
 }
 
 func main() {

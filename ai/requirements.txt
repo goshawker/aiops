@@ -22,7 +22,6 @@ scipy==1.14.1
 # LLM
 transformers==4.46.3
 torch==2.5.1
-auto-gptq==0.7.1
 sentencepiece==0.2.0
 
 # NebulaGraph
