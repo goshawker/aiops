@@ -4,7 +4,7 @@ import { ClusterOutlined } from '@ant-design/icons'
 import ReactECharts from 'echarts-for-react'
 import client from '@/api/client'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 
 interface GraphData {
   nodes: string[]
@@ -129,20 +129,17 @@ export default function Topology() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <Title level={4} style={{ margin: 0 }}>
-          <ClusterOutlined /> 拓扑视图
-        </Title>
-        {graph && (
+      {graph && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
           <Space>
             <Tag>{graph.nodes.length} 节点</Tag>
             <Tag>{graph.edges.length} 关系</Tag>
             <Tag>{graph.metric_count} 指标</Tag>
           </Space>
-        )}
-      </div>
+        </div>
+      )}
 
-      <Card>
+      <Card style={{ padding: 16 }}>
         {loading ? (
           <div style={{ height: 500, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Spin size="large" />

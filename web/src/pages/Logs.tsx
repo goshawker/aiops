@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
 import { Card, Input, Select, Table, Tag, Space, Typography, message, Tooltip } from 'antd'
-import { SearchOutlined, FileTextOutlined } from '@ant-design/icons'
+import { SearchOutlined } from '@ant-design/icons'
 import { logsApi } from '@/api'
 import type { LogEntry } from '@/api/logs'
 
-const { Title, Text, Paragraph } = Typography
+const { Text, Paragraph } = Typography
 
 const levelColors: Record<string, string> = {
   FATAL: 'red',
@@ -112,10 +112,6 @@ export default function Logs() {
 
   return (
     <div>
-      <Title level={4}>
-        <FileTextOutlined /> 日志管理
-      </Title>
-
       {/* Search filters */}
       <Card size="small" style={{ marginBottom: 16 }}>
         <Space wrap>

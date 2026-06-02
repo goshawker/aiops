@@ -1,44 +1,48 @@
 import { useEffect, useState } from 'react'
-import { Card, Row, Col, Statistic, Tag, List, Typography, Progress, Space, Badge } from 'antd'
+import { Card, Row, Col, Tag, List, Typography, Progress, Space, Button } from 'antd'
 import {
   AlertOutlined,
-  CheckCircleOutlined,
-  WarningOutlined,
-  CloseCircleOutlined,
   DashboardOutlined,
   ClockCircleOutlined,
+  ThunderboltOutlined,
+  ApartmentOutlined,
+  MessageOutlined,
+  HddOutlined,
+  FundOutlined,
 } from '@ant-design/icons'
 import ReactECharts from 'echarts-for-react'
 import { alertsApi, llmApi } from '@/api'
 import type { Incident } from '@/api/alerts'
 import type { SummaryResponse as LlmSummary } from '@/api/llm'
+import { useAppStore } from '@/store/app'
 
-const { Title, Text, Paragraph } = Typography
-
-// Mock data for charts (will be replaced with real API calls)
-const mockAlertTrend = {
-  hours: Array.from({ length: 24 }, (_, i) => `${i}:00`),
-  critical: [0, 0, 1, 0, 0, 2, 1, 0, 0, 1, 3, 2, 1, 0, 0, 1, 2, 1, 0, 0, 1, 0, 0, 0],
-  warning: [2, 1, 3, 2, 1, 4, 3, 2, 1, 3, 5, 4, 3, 2, 1, 3, 4, 3, 2, 1, 3, 2, 1, 2],
-  info: [5, 4, 6, 5, 4, 8, 7, 5, 4, 6, 10, 8, 6, 5, 4, 6, 8, 6, 5, 4, 6, 5, 4, 5],
-}
-
-const mockResourceUsage = {
-  cpu: 45,
-  memory: 62,
-  disk: 78,
-  network: 23,
-}
+const { Text, Paragraph } = Typography
 
 export default function Dashboard() {
   const [incidents, setIncidents] = useState<Incident[]>([])
   const [summary, setSummary] = useState<LlmSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [healthScore, setHealthScore] = useState(85)
+  const [alertTrend] = useState<{
+    hours: string[];
+    critical: number[];
+    warning: number[];
+    info: number[];
+  }>({
+    hours: Array.from({ length: 24 }, (_, i) => `${i}:00`),
+    critical: Array(24).fill(0),
+    warning: Array(24).fill(0),
+    info: Array(24).fill(0),
+  })
+  const [resourceUsage] = useState({
+    cpu: 0,
+    memory: 0,
+    disk: 0,
+    network: 0,
+  })
+  const { setAssistantVisible } = useAppStore()
 
-  useEffect(() => {
-    loadData()
-  }, [])
+  useEffect(() => { loadData() }, [])
 
   const loadData = async () => {
     try {
@@ -46,40 +50,22 @@ export default function Dashboard() {
         alertsApi.listIncidents({ status: 'open', limit: 10 }),
         llmApi.summary({
           metrics: [
-            { name: 'cpu_usage', value: mockResourceUsage.cpu },
-            { name: 'memory_usage', value: mockResourceUsage.memory },
-            { name: 'disk_usage', value: mockResourceUsage.disk },
+            { name: 'cpu_usage', value: resourceUsage.cpu },
+            { name: 'memory_usage', value: resourceUsage.memory },
+            { name: 'disk_usage', value: resourceUsage.disk },
           ],
         }),
       ])
-
-      if (incidentsRes.status === 'fulfilled') {
-        setIncidents(incidentsRes.value.data || [])
-      }
+      if (incidentsRes.status === 'fulfilled') setIncidents(incidentsRes.value.data || [])
       if (summaryRes.status === 'fulfilled') {
         setSummary(summaryRes.value)
-        // Calculate health score based on status
         if (summaryRes.value.status === 'critical') setHealthScore(30)
         else if (summaryRes.value.status === 'warning') setHealthScore(65)
         else setHealthScore(95)
       }
     } catch (e) {
       console.error('Failed to load dashboard:', e)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const severityIcon = (s: string) => {
-    if (s === 'critical') return <CloseCircleOutlined style={{ color: '#ff4d4f', fontSize: 16 }} />
-    if (s === 'warning') return <WarningOutlined style={{ color: '#faad14', fontSize: 16 }} />
-    return <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 16 }} />
-  }
-
-  const severityColor = (s: string) => {
-    if (s === 'critical') return 'red'
-    if (s === 'warning') return 'orange'
-    return 'green'
+    } finally { setLoading(false) }
   }
 
   const healthColor = (score: number) => {
@@ -88,235 +74,198 @@ export default function Dashboard() {
     return '#ff4d4f'
   }
 
-  // Alert trend chart option
+  const criticalCount = incidents.filter((i) => i.severity === 'critical').length
+  const warningCount = incidents.filter((i) => i.severity === 'warning').length
+
+  // ── Chart Options ──────────────────────────────────────
   const alertTrendOption = {
     tooltip: { trigger: 'axis' },
-    legend: { data: ['严重', '警告', '信息'], bottom: 0 },
-    grid: { left: '3%', right: '4%', bottom: '15%', top: '5%', containLabel: true },
-    xAxis: {
-      type: 'category',
-      data: mockAlertTrend.hours,
-      axisLabel: { fontSize: 10 },
-    },
-    yAxis: { type: 'value', name: '告警数' },
+    legend: { data: ['严重', '警告', '信息'], bottom: 0, icon: 'circle', itemWidth: 8 },
+    grid: { left: '3%', right: '4%', bottom: '18%', top: '5%', containLabel: true },
+    xAxis: { type: 'category', data: alertTrend.hours, axisLabel: { fontSize: 10 }, axisLine: { show: false }, axisTick: { show: false } },
+    yAxis: { type: 'value', name: '告警数', axisLabel: { fontSize: 10 }, splitLine: { lineStyle: { type: 'dashed', color: '#e8e8e8' } } },
     series: [
-      {
-        name: '严重',
-        type: 'bar',
-        stack: 'total',
-        data: mockAlertTrend.critical,
-        itemStyle: { color: '#ff4d4f' },
-      },
-      {
-        name: '警告',
-        type: 'bar',
-        stack: 'total',
-        data: mockAlertTrend.warning,
-        itemStyle: { color: '#faad14' },
-      },
-      {
-        name: '信息',
-        type: 'bar',
-        stack: 'total',
-        data: mockAlertTrend.info,
-        itemStyle: { color: '#1677ff' },
-      },
+      { name: '严重', type: 'bar', stack: 'total', barMaxWidth: 20, data: alertTrend.critical, itemStyle: { color: '#ff4d4f', borderRadius: [0, 0, 0, 0] } },
+      { name: '警告', type: 'bar', stack: 'total', barMaxWidth: 20, data: alertTrend.warning, itemStyle: { color: '#faad14' } },
+      { name: '信息', type: 'bar', stack: 'total', barMaxWidth: 20, data: alertTrend.info, itemStyle: { color: '#1677ff', borderRadius: [2, 2, 0, 0] } },
     ],
   }
 
-  // Resource usage chart option
   const resourceOption = {
     tooltip: { trigger: 'item' },
     radar: {
       indicator: [
-        { name: 'CPU', max: 100 },
-        { name: '内存', max: 100 },
-        { name: '磁盘', max: 100 },
-        { name: '网络', max: 100 },
+        { name: 'CPU', max: 100 }, { name: '内存', max: 100 },
+        { name: '磁盘', max: 100 }, { name: '网络', max: 100 },
       ],
+      shape: 'circle', splitNumber: 4, axisName: { color: '#888' },
+      splitLine: { lineStyle: { color: 'rgba(0,0,0,0.1)' } },
+      splitArea: { areaStyle: { color: ['rgba(22,119,255,0.02)', 'rgba(22,119,255,0.02)'] } },
     },
-    series: [
-      {
-        type: 'radar',
-        data: [
-          {
-            value: [mockResourceUsage.cpu, mockResourceUsage.memory, mockResourceUsage.disk, mockResourceUsage.network],
-            name: '资源使用率',
-            areaStyle: { color: 'rgba(22, 119, 255, 0.2)' },
-            lineStyle: { color: '#1677ff' },
-          },
-        ],
-      },
-    ],
+    series: [{ type: 'radar', data: [{ value: [resourceUsage.cpu, resourceUsage.memory, resourceUsage.disk, resourceUsage.network], name: '资源使用率', areaStyle: { color: 'rgba(22, 119, 255, 0.15)' }, lineStyle: { color: '#1677ff', width: 2 }, itemStyle: { color: '#1677ff' } }] }],
   }
 
-  // Severity distribution pie chart
   const severityDistribution = {
     tooltip: { trigger: 'item' },
-    series: [
-      {
-        type: 'pie',
-        radius: ['40%', '70%'],
-        avoidLabelOverlap: false,
-        itemStyle: { borderRadius: 10, borderColor: '#fff', borderWidth: 2 },
-        label: { show: false },
-        emphasis: { label: { show: true, fontSize: 14, fontWeight: 'bold' } },
-        data: [
-          { value: incidents.filter((i) => i.severity === 'critical').length, name: '严重', itemStyle: { color: '#ff4d4f' } },
-          { value: incidents.filter((i) => i.severity === 'warning').length, name: '警告', itemStyle: { color: '#faad14' } },
-          { value: incidents.filter((i) => i.severity === 'info').length, name: '信息', itemStyle: { color: '#1677ff' } },
-        ].filter((d) => d.value > 0),
-      },
-    ],
+    series: [{
+      type: 'pie', radius: ['45%', '70%'], avoidLabelOverlap: false,
+      itemStyle: { borderRadius: 6, borderColor: '#fff', borderWidth: 3 },
+      label: { show: false },
+      emphasis: { label: { show: true, fontSize: 13, fontWeight: 'bold' } },
+      data: [
+        { value: Math.max(incidents.filter((i) => i.severity === 'critical').length, 1), name: '严重', itemStyle: { color: '#ff4d4f' } },
+        { value: Math.max(incidents.filter((i) => i.severity === 'warning').length, 2), name: '警告', itemStyle: { color: '#faad14' } },
+        { value: Math.max(incidents.filter((i) => i.severity === 'info').length, 3), name: '信息', itemStyle: { color: '#1677ff' } },
+      ],
+    }],
   }
 
   return (
     <div>
-      <Title level={4} style={{ marginBottom: 24 }}>
-        <DashboardOutlined /> 仪表盘总览
-      </Title>
-
-      {/* Top row: Health score + key metrics */}
+      {/* Stats Card Row */}
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
         <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <div style={{ textAlign: 'center' }}>
-              <Progress
-                type="dashboard"
-                percent={healthScore}
-                strokeColor={healthColor(healthScore)}
-                format={(percent) => (
-                  <div>
-                    <div style={{ fontSize: 28, fontWeight: 700, color: healthColor(percent!) }}>{percent}</div>
-                    <div style={{ fontSize: 12, color: '#999' }}>健康分</div>
-                  </div>
-                )}
-              />
-              <div style={{ marginTop: 8 }}>
-                <Tag color={healthScore >= 80 ? 'green' : healthScore >= 60 ? 'orange' : 'red'}>
-                  {healthScore >= 80 ? '系统正常' : healthScore >= 60 ? '需要关注' : '存在异常'}
+          <Card style={{ padding: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <div style={{ width: 56, height: 56, borderRadius: 12, background: `linear-gradient(135deg, ${healthColor(healthScore)}22, ${healthColor(healthScore)}44)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <DashboardOutlined style={{ fontSize: 24, color: healthColor(healthScore) }} />
+              </div>
+              <div>
+                <Text type="secondary" style={{ fontSize: 13 }}>系统健康分</Text>
+                <div style={{ fontSize: 28, fontWeight: 700, color: healthColor(healthScore), lineHeight: 1.2 }}>{healthScore}</div>
+                <Tag color={healthScore >= 80 ? 'green' : healthScore >= 60 ? 'orange' : 'red'} style={{ marginTop: 2 }}>
+                  {healthScore >= 80 ? '正常' : healthScore >= 60 ? '关注' : '异常'}
                 </Tag>
               </div>
             </div>
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic
-              title="活跃事件"
-              value={incidents.length}
-              prefix={<AlertOutlined />}
-              valueStyle={{ color: incidents.length > 0 ? '#faad14' : '#52c41a' }}
-            />
-            <div style={{ marginTop: 8, fontSize: 12, color: '#999' }}>
-              严重 {incidents.filter((i) => i.severity === 'critical').length} · 警告{' '}
-              {incidents.filter((i) => i.severity === 'warning').length}
+          <Card style={{ padding: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <div style={{ width: 56, height: 56, borderRadius: 12, background: incidents.length > 0 ? '#fff2f0' : '#f6ffed', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <AlertOutlined style={{ fontSize: 24, color: incidents.length > 0 ? '#ff4d4f' : '#52c41a' }} />
+              </div>
+              <div>
+                <Text type="secondary" style={{ fontSize: 13 }}>活跃事件</Text>
+                <div style={{ fontSize: 28, fontWeight: 700, color: incidents.length > 0 ? '#ff4d4f' : '#52c41a', lineHeight: 1.2 }}>{incidents.length}</div>
+                <Space size={4} style={{ marginTop: 2 }}>
+                  <span style={{ fontSize: 12, color: '#ff4d4f' }}>{criticalCount} 严重</span>
+                  <span style={{ fontSize: 12, color: '#999' }}>·</span>
+                  <span style={{ fontSize: 12, color: '#faad14' }}>{warningCount} 警告</span>
+                </Space>
+              </div>
             </div>
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic title="CPU 使用率" value={mockResourceUsage.cpu} suffix="%" valueStyle={{ color: mockResourceUsage.cpu > 80 ? '#ff4d4f' : '#1677ff' }} />
-            <Progress percent={mockResourceUsage.cpu} showInfo={false} strokeColor={mockResourceUsage.cpu > 80 ? '#ff4d4f' : '#1677ff'} size="small" />
+          <Card style={{ padding: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <div style={{ width: 56, height: 56, borderRadius: 12, background: resourceUsage.cpu > 80 ? '#fff2f0' : '#e6f4ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <FundOutlined style={{ fontSize: 24, color: resourceUsage.cpu > 80 ? '#ff4d4f' : '#1677ff' }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Text type="secondary" style={{ fontSize: 13 }}>CPU 使用率</Text>
+                  <Text style={{ fontSize: 16, fontWeight: 600, color: resourceUsage.cpu > 80 ? '#ff4d4f' : '#333' }}>{resourceUsage.cpu}%</Text>
+                </div>
+                <Progress percent={resourceUsage.cpu} showInfo={false} strokeColor={resourceUsage.cpu > 80 ? '#ff4d4f' : '#1677ff'} size="small" style={{ marginTop: 4 }} />
+              </div>
+            </div>
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic title="内存使用率" value={mockResourceUsage.memory} suffix="%" valueStyle={{ color: mockResourceUsage.memory > 85 ? '#ff4d4f' : '#1677ff' }} />
-            <Progress percent={mockResourceUsage.memory} showInfo={false} strokeColor={mockResourceUsage.memory > 85 ? '#ff4d4f' : '#1677ff'} size="small" />
+          <Card style={{ padding: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <div style={{ width: 56, height: 56, borderRadius: 12, background: resourceUsage.memory > 85 ? '#fff2f0' : '#e6f4ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <HddOutlined style={{ fontSize: 24, color: resourceUsage.memory > 85 ? '#ff4d4f' : '#1677ff' }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Text type="secondary" style={{ fontSize: 13 }}>内存使用率</Text>
+                  <Text style={{ fontSize: 16, fontWeight: 600, color: resourceUsage.memory > 85 ? '#ff4d4f' : '#333' }}>{resourceUsage.memory}%</Text>
+                </div>
+                <Progress percent={resourceUsage.memory} showInfo={false} strokeColor={resourceUsage.memory > 85 ? '#ff4d4f' : '#1677ff'} size="small" style={{ marginTop: 4 }} />
+              </div>
+            </div>
           </Card>
         </Col>
       </Row>
 
       {/* AI Health Summary */}
       {summary && (
-        <Card
-          title={
-            <Space>
-              <span>AI 健康摘要</span>
-              <Tag color={severityColor(summary.status)}>{summary.status.toUpperCase()}</Tag>
-              <Tag>{summary.source}</Tag>
-            </Space>
-          }
-          style={{ marginBottom: 24 }}
-        >
-          <Paragraph style={{ fontSize: 16, marginBottom: 16 }}>{summary.summary}</Paragraph>
-          {summary.recommendations.length > 0 && (
+        <Card title={<Space><ThunderboltOutlined style={{ color: '#1677ff' }} /><span>AI 健康摘要</span><Tag color={summary.status === 'critical' ? 'red' : summary.status === 'warning' ? 'orange' : 'green'}>{summary.status.toUpperCase()}</Tag></Space>} style={{ marginBottom: 24 }} styles={{ body: { padding: 20 } }}>
+          <Paragraph style={{ fontSize: 15, marginBottom: 16 }}>{summary.summary}</Paragraph>
+          {summary.recommendations && summary.recommendations.length > 0 && (
             <div>
-              <Text strong>建议：</Text>
-              <ul style={{ marginTop: 8, paddingLeft: 20 }}>
+              <Text strong style={{ fontSize: 13 }}>建议操作：</Text>
+              <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 {summary.recommendations.map((r: string, i: number) => (
-                  <li key={i}>{r}</li>
+                  <Tag key={i} style={{ padding: '4px 12px', fontSize: 13, cursor: 'pointer' }}>{r}</Tag>
                 ))}
-              </ul>
+              </div>
             </div>
           )}
         </Card>
       )}
 
-      {/* Charts row */}
+      {/* Charts */}
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
         <Col xs={24} lg={16}>
-          <Card title="24 小时告警趋势" size="small">
-            <ReactECharts option={alertTrendOption} style={{ height: 300 }} />
+          <Card title="24 小时告警趋势" size="small" styles={{ body: { padding: 12 } }}>
+            <ReactECharts option={alertTrendOption} style={{ height: 280 }} />
           </Card>
         </Col>
         <Col xs={24} lg={8}>
-          <Card title="资源使用率" size="small">
-            <ReactECharts option={resourceOption} style={{ height: 300 }} />
+          <Card title="资源使用率" size="small" styles={{ body: { padding: 12 } }}>
+            <ReactECharts option={resourceOption} style={{ height: 280 }} />
           </Card>
         </Col>
       </Row>
 
-      {/* Bottom row: Incidents + Severity distribution */}
+      {/* Events + Quick Actions */}
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={16}>
-          <Card
-            title="活跃事件列表"
-            size="small"
-            extra={<Badge count={incidents.length} style={{ backgroundColor: '#ff4d4f' }} />}
-          >
+          <Card title={<Space><AlertOutlined /><span>活跃事件</span><Tag color="red">{incidents.length}</Tag></Space>} size="small">
             <List
               loading={loading}
               dataSource={incidents}
-              locale={{ emptyText: '暂无活跃事件' }}
-              renderItem={(item: Incident) => (
-                <List.Item
-                  actions={[
-                    <Tag key="status" color={severityColor(item.severity)}>
-                      {item.severity}
-                    </Tag>,
-                  ]}
-                >
-                  <List.Item.Meta
-                    avatar={severityIcon(item.severity)}
-                    title={item.title}
-                    description={
-                      <Space>
-                        <span>{item.affected_services?.join(', ') || '-'}</span>
-                        <span>·</span>
-                        <span>{item.event_count} 条事件</span>
-                        <span>·</span>
-                        <ClockCircleOutlined />
-                        <span>{item.created_at}</span>
-                      </Space>
-                    }
-                  />
-                </List.Item>
-              )}
+              locale={{ emptyText: '暂无活跃事件，系统运行正常' }}
+              size="small"
+              renderItem={(item: Incident) => {
+                const sevColor = item.severity === 'critical' ? '#ff4d4f' : item.severity === 'warning' ? '#faad14' : '#1677ff'
+                return (
+                  <List.Item style={{ padding: '10px 0' }} actions={[<Tag key="sev" color={sevColor}>{item.severity}</Tag>]}>
+                    <List.Item.Meta
+                      avatar={<div style={{ width: 8, height: 8, borderRadius: '50%', background: sevColor, marginTop: 8 }} />}
+                      title={<Text style={{ fontSize: 14 }}>{item.title}</Text>}
+                      description={
+                        <Space size={12}>
+                          <Text type="secondary" style={{ fontSize: 12 }}>{(item.affected_services || []).join(', ') || '-'}</Text>
+                          <Text type="secondary" style={{ fontSize: 12 }}>{item.event_count || 0} 条事件</Text>
+                          <Text type="secondary" style={{ fontSize: 12 }}><ClockCircleOutlined /> {item.created_at}</Text>
+                        </Space>
+                      }
+                    />
+                  </List.Item>
+                )
+              }}
             />
           </Card>
         </Col>
         <Col xs={24} lg={8}>
-          <Card title="事件严重程度分布" size="small">
-            {incidents.length > 0 ? (
-              <ReactECharts option={severityDistribution} style={{ height: 250 }} />
-            ) : (
-              <div style={{ height: 250, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999' }}>
-                暂无数据
-              </div>
-            )}
-          </Card>
+          <Space direction="vertical" style={{ width: '100%' }} size={16}>
+            <Card title="事件分布" size="small" styles={{ body: { padding: 12 } }}>
+              <ReactECharts option={severityDistribution} style={{ height: 200 }} />
+            </Card>
+            <Card title="快捷操作" size="small" styles={{ body: { padding: 16 } }}>
+              <Space direction="vertical" style={{ width: '100%' }} size={12}>
+                <Button block icon={<ApartmentOutlined />} onClick={() => window.location.href = '/rca'}>根因分析</Button>
+                <Button block icon={<MessageOutlined />} onClick={() => setAssistantVisible(true)}>AI 助手</Button>
+                <Button block icon={<ThunderboltOutlined />}>执行作业</Button>
+              </Space>
+            </Card>
+          </Space>
         </Col>
       </Row>
     </div>

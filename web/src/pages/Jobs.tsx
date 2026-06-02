@@ -3,7 +3,7 @@ import { Card, Table, Tag, Button, Space, Typography, message, Modal, Form, Inpu
 import { PlusOutlined, PlayCircleOutlined, HistoryOutlined, DeleteOutlined, ClockCircleOutlined } from '@ant-design/icons'
 import client from '@/api/client'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 
 interface Job {
   id: number
@@ -221,16 +221,13 @@ export default function Jobs() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <Title level={4} style={{ margin: 0 }}>
-          <ClockCircleOutlined /> 作业管理
-        </Title>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateVisible(true)}>
           新建作业
         </Button>
       </div>
 
-      <Card>
+      <Card style={{ padding: 16 }}>
         <Table
           dataSource={jobs}
           columns={columns}

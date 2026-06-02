@@ -1,12 +1,15 @@
 import { useState, useRef } from 'react'
 import { Card, Input, Button, Space, Table, Tag, Typography, Select, Tooltip, message, Row, Col } from 'antd'
-import { SearchOutlined, ReloadOutlined, LineChartOutlined } from '@ant-design/icons'
+import { SearchOutlined, LineChartOutlined } from '@ant-design/icons'
 import ReactECharts from 'echarts-for-react'
 import { metricsApi } from '@/api'
 import type { MetricSeries } from '@/api/metrics'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 const { TextArea } = Input
+
+// Color palette for multiple series
+const COLORS = ['#1677ff', '#ff4d4f', '#52c41a', '#faad14', '#722ed1', '#13c2c2', '#eb2f96', '#fa8c16']
 
 // Common PromQL queries for quick access
 const commonQueries = [
@@ -18,8 +21,6 @@ const commonQueries = [
   { name: '磁盘 I/O', query: 'rate(node_disk_io_time_seconds_total[5m])', description: '磁盘 I/O 使用率' },
 ]
 
-// Color palette for multiple series
-const COLORS = ['#1677ff', '#ff4d4f', '#52c41a', '#faad14', '#722ed1', '#13c2c2', '#eb2f96', '#fa8c16']
 
 export default function Metrics() {
   const [query, setQuery] = useState('up')
@@ -164,92 +165,58 @@ export default function Metrics() {
 
   return (
     <div>
-      <Title level={4}>
-        <LineChartOutlined /> 指标监控
-      </Title>
-
       {/* Query editor */}
-      <Card size="small" style={{ marginBottom: 16 }}>
-        <Row gutter={16} align="middle">
+      <Card
+        size="small"
+        style={{ marginBottom: 16, border: '1px solid #e8e8e8', padding: '12px 16px' }}
+      >
+        <Row gutter={12} align="middle">
           <Col flex="auto">
             <TextArea
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="输入 PromQL 查询..."
               autoSize={{ minRows: 1, maxRows: 4 }}
-              style={{ fontFamily: 'monospace', fontSize: 13 }}
+              style={{ fontFamily: 'monospace', fontSize: 13, borderRadius: 6 }}
               onPressEnter={(e) => {
-                if (!e.shiftKey) {
-                  e.preventDefault()
-                  handleQuery()
-                }
+                if (!e.shiftKey) { e.preventDefault(); handleQuery() }
               }}
             />
           </Col>
           <Col>
-            <Space direction="vertical" size={4}>
-              <Space size={4}>
-                <Select
-                  value={timeRange}
-                  onChange={setTimeRange}
-                  style={{ width: 90 }}
-                  size="small"
-                  options={[
-                    { label: '15 分钟', value: '15m' },
-                    { label: '30 分钟', value: '30m' },
-                    { label: '1 小时', value: '1h' },
-                    { label: '3 小时', value: '3h' },
-                    { label: '6 小时', value: '6h' },
-                    { label: '12 小时', value: '12h' },
-                    { label: '24 小时', value: '24h' },
-                    { label: '7 天', value: '7d' },
-                  ]}
-                />
-                <Select
-                  value={step}
-                  onChange={setStep}
-                  style={{ width: 80 }}
-                  size="small"
-                  options={[
-                    { label: '15s', value: '15s' },
-                    { label: '1m', value: '60s' },
-                    { label: '5m', value: '300s' },
-                    { label: '15m', value: '900s' },
-                    { label: '1h', value: '3600s' },
-                  ]}
-                />
-              </Space>
-              <Space size={4}>
-                <Button type="primary" icon={<SearchOutlined />} onClick={handleQuery} loading={loading} size="small">
-                  查询
-                </Button>
-                <Button icon={<ReloadOutlined />} onClick={() => setResults([])} size="small">
-                  清空
-                </Button>
-                <Tooltip title={showChart ? '隐藏图表' : '显示图表'}>
-                  <Button
-                    type={showChart ? 'primary' : 'default'}
-                    icon={<LineChartOutlined />}
-                    onClick={() => setShowChart(!showChart)}
-                    size="small"
-                  />
-                </Tooltip>
-              </Space>
+            <Space size={8}>
+              <Select value={timeRange} onChange={setTimeRange} style={{ width: 95 }} size="small" options={[
+                { label: '15 分钟', value: '15m' }, { label: '30 分钟', value: '30m' },
+                { label: '1 小时', value: '1h' }, { label: '3 小时', value: '3h' },
+                { label: '6 小时', value: '6h' }, { label: '12 小时', value: '12h' },
+                { label: '24 小时', value: '24h' }, { label: '7 天', value: '7d' },
+              ]} />
+              <Select value={step} onChange={setStep} style={{ width: 70 }} size="small" options={[
+                { label: '15s', value: '15s' }, { label: '1m', value: '60s' },
+                { label: '5m', value: '300s' }, { label: '15m', value: '900s' }, { label: '1h', value: '3600s' },
+              ]} />
+              <Button type="primary" icon={<SearchOutlined />} onClick={handleQuery} loading={loading} style={{ borderRadius: 6 }}>查询</Button>
+              <Tooltip title={showChart ? '隐藏图表' : '显示图表'}>
+                <Button type={showChart ? 'primary' : 'default'} icon={<LineChartOutlined />} onClick={() => setShowChart(!showChart)} style={{ borderRadius: 6 }} />
+              </Tooltip>
             </Space>
           </Col>
         </Row>
       </Card>
 
       {/* Quick queries */}
-      <Card size="small" title="常用查询" style={{ marginBottom: 16 }} bodyStyle={{ padding: '8px 16px' }}>
-        <Space wrap size={[8, 8]}>
+      <Card
+        size="small"
+        title={<span style={{ fontSize: 13, color: '#666' }}>常用查询</span>}
+        style={{ marginBottom: 16 }}
+        styles={{ header: { padding: '8px 16px', minHeight: 36, borderBottom: 'none' }, body: { padding: '0 16px 10px' } }}
+      >
+        <Space wrap size={[6, 6]}>
           {commonQueries.map((q) => (
             <Tooltip key={q.name} title={q.description}>
               <Tag
-                style={{ cursor: 'pointer' }}
-                onClick={() => {
-                  setQuery(q.query)
-                }}
+                style={{ cursor: 'pointer', padding: '2px 10px', borderRadius: 4, fontSize: 12, border: '1px solid #e8e8e8' }}
+                onClick={() => setQuery(q.query)}
               >
                 {q.name}
               </Tag>
@@ -275,8 +242,6 @@ export default function Metrics() {
             ref={chartRef}
             option={getChartOption()}
             style={{ height: 400 }}
-            notMerge
-            lazyUpdate
           />
         </Card>
       )}

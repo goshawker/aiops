@@ -33,11 +33,11 @@ producer = KafkaProducer(KAFKA_BROKERS)
 def handle_metric(msg: dict):
     """Process incoming metric from Kafka."""
     point = MetricPoint(
+        metric_name=msg.get("metric_name", ""),
         timestamp=msg.get("timestamp", 0),
         value=float(msg.get("value", 0)),
         labels=msg.get("labels", {}),
     )
-    point.metric_name = msg.get("metric_name", "")
 
     result = detector.detect(point)
     if result:
@@ -67,11 +67,11 @@ def detect():
     """Manual anomaly detection endpoint."""
     data = request.json or {}
     point = MetricPoint(
+        metric_name=data.get("metric_name", ""),
         timestamp=data.get("timestamp", 0),
         value=float(data.get("value", 0)),
         labels=data.get("labels", {}),
     )
-    point.metric_name = data.get("metric_name", "")
 
     result = detector.detect(point)
     if result:

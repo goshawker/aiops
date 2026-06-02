@@ -13,11 +13,13 @@ import (
 
 // AlertService processes alerts and manages incidents
 type AlertService struct {
-	alertRepo *repo.AlertRepo
+	alertRepo    *repo.AlertRepo
+	alertRuleRepo *repo.AlertRuleRepo
+	vmClient     *repo.VMClient
 }
 
-func NewAlertService(alertRepo *repo.AlertRepo) *AlertService {
-	return &AlertService{alertRepo: alertRepo}
+func NewAlertService(alertRepo *repo.AlertRepo, alertRuleRepo *repo.AlertRuleRepo, vmClient *repo.VMClient) *AlertService {
+	return &AlertService{alertRepo: alertRepo, alertRuleRepo: alertRuleRepo, vmClient: vmClient}
 }
 
 // ProcessAlertEvent handles an incoming alert event
@@ -147,4 +149,149 @@ func getString(m map[string]interface{}, key string) string {
 		return v
 	}
 	return ""
+}
+
+// --- Alert Rule CRUD ---
+
+func (s *AlertService) CreateRule(rule *model.AlertRule) error {
+	return s.alertRuleRepo.CreateRule(rule)
+}
+
+func (s *AlertService) GetRule(id int64) (*model.AlertRule, error) {
+	return s.alertRuleRepo.GetRule(id)
+}
+
+func (s *AlertService) ListRules(tenantID int64, limit, offset int) ([]model.AlertRule, int, error) {
+	return s.alertRuleRepo.ListRules(tenantID, limit, offset)
+}
+
+func (s *AlertService) UpdateRule(rule *model.AlertRule) error {
+	return s.alertRuleRepo.UpdateRule(rule)
+}
+
+func (s *AlertService) DeleteRule(id int64) error {
+	return s.alertRuleRepo.DeleteRule(id)
+}
+
+// --- Rule Evaluation Engine ---
+
+// StartRuleEvaluator runs a periodic loop that evaluates enabled alert rules.
+func (s *AlertService) StartRuleEvaluator(ctx context.Context, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	log.Printf("alert: rule evaluator started (interval=%s)", interval)
+	for {
+		select {
+		case <-ctx.Done():
+			log.Println("alert: rule evaluator stopped")
+			return
+		case <-ticker.C:
+			s.evaluateRules(ctx)
+		}
+	}
+}
+
+// evaluateRules fetches all enabled rules, evaluates threshold rules against
+// VictoriaMetrics, and fires alert events for triggered rules.
+func (s *AlertService) evaluateRules(ctx context.Context) {
+	rules, err := s.alertRuleRepo.GetEnabledRules()
+	if err != nil {
+		log.Printf("alert: failed to fetch enabled rules: %v", err)
+		return
+	}
+
+	for _, rule := range rules {
+		switch rule.RuleType {
+		case "threshold":
+			s.evaluateThresholdRule(ctx, rule)
+		case "anomaly":
+			// Anomaly rules are evaluated by the anomaly detection service (Python).
+			// The alert engine does not re-evaluate them.
+		case "log_pattern":
+			// Log pattern rules require ClickHouse queries, not yet implemented.
+		}
+	}
+}
+
+// evaluateThresholdRule evaluates a single threshold rule against VictoriaMetrics.
+// Rule config JSON: {"metric":"cpu_usage","op":">","value":80,"duration":"5m"}
+func (s *AlertService) evaluateThresholdRule(ctx context.Context, rule model.AlertRule) {
+	if s.vmClient == nil {
+		return
+	}
+
+	cfg := repo.ParseRuleConfig(rule.RuleConfig)
+	metric, _ := cfg["metric"].(string)
+	op, _ := cfg["op"].(string)
+	thresholdValue, _ := cfg["value"].(float64)
+
+	if metric == "" || op == "" || thresholdValue == 0 {
+		return
+	}
+
+	// Build PromQL: the metric name as-is; user can put a full PromQL expression in metric field.
+	promql := metric
+
+	results, err := s.vmClient.QueryInstant(promql, time.Now())
+	if err != nil {
+		log.Printf("alert: rule %d query failed: %v", rule.ID, err)
+		return
+	}
+
+	for _, r := range results {
+		if len(r.Values) == 0 {
+			continue
+		}
+		val := r.Values[0].Value
+		triggered := false
+
+		switch op {
+		case ">":
+			triggered = val > thresholdValue
+		case ">=":
+			triggered = val >= thresholdValue
+		case "<":
+			triggered = val < thresholdValue
+		case "<=":
+			triggered = val <= thresholdValue
+		case "==":
+			triggered = val == thresholdValue
+		case "!=":
+			triggered = val != thresholdValue
+		}
+
+		if !triggered {
+			continue
+		}
+
+		// Build and save alert event
+		instance, _ := r.Metric["instance"]
+		job, _ := r.Metric["job"]
+
+		event := &model.AlertEvent{
+			TenantID:   rule.TenantID,
+			RuleID:     rule.ID,
+			RuleName:   rule.Name,
+			SourceType: "metric",
+			Source:     metric,
+			Host:       instance,
+			Service:    job,
+			Severity:   rule.Severity,
+			Title:      fmt.Sprintf("%s %s %.2f", rule.Name, op, thresholdValue),
+			Message:    fmt.Sprintf("指标 %s 当前值 %.2f %s 阈值 %.2f", metric, val, op, thresholdValue),
+			Value:      fmt.Sprintf("%.2f", val),
+			Threshold:  fmt.Sprintf("%.2f", thresholdValue),
+			Status:     "firing",
+			FiredAt:    time.Now(),
+		}
+		labelsJSON, _ := json.Marshal(r.Metric)
+		event.Labels = string(labelsJSON)
+
+		if err := s.alertRepo.SaveEvent(event); err != nil {
+			log.Printf("alert: failed to save event for rule %d: %v", rule.ID, err)
+		} else {
+			log.Printf("alert: rule %d triggered - %s = %.2f %s %.2f", rule.ID, metric, val, op, thresholdValue)
+		}
+	}
 }

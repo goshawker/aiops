@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { Card, Typography, Input, Button, Space, Tag, message, Row, Col, List, Progress } from 'antd'
-import { ApartmentOutlined, SearchOutlined } from '@ant-design/icons'
+import { SearchOutlined } from '@ant-design/icons'
 import ReactECharts from 'echarts-for-react'
 import client from '@/api/client'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 const { TextArea } = Input
 
 interface RootCause {
@@ -114,12 +114,8 @@ export default function RCA() {
 
   return (
     <div>
-      <Title level={4}>
-        <ApartmentOutlined /> 根因分析
-      </Title>
-
       {/* Input */}
-      <Card size="small" style={{ marginBottom: 16 }}>
+      <Card size="small" style={{ marginBottom: 16, padding: 16 }}>
         <Row gutter={16}>
           <Col flex="auto">
             <TextArea

@@ -73,6 +73,31 @@ ai-install:
 ai-test:
 	@cd ai && python -m pytest -v
 
+## agent-build-linux-amd64: build agent for Linux amd64
+agent-build-linux-amd64:
+	@GOOS=linux GOARCH=amd64 go build -o bin/agent-linux-amd64 ./cmd/agent
+
+## agent-build-linux-arm64: build agent for Linux arm64 (鲲鹏/飞腾)
+agent-build-linux-arm64:
+	@GOOS=linux GOARCH=arm64 go build -o bin/agent-linux-arm64 ./cmd/agent
+
+## agent-build-linux-loong64: build agent for LoongArch (龙芯)
+agent-build-linux-loong64:
+	@GOOS=linux GOARCH=loong64 go build -o bin/agent-linux-loong64 ./cmd/agent
+
+## agent-build-all: build agent for all supported platforms
+agent-build-all: agent-build-linux-amd64 agent-build-linux-arm64 agent-build-darwin-amd64 agent-build-darwin-arm64
+
+## agent-build-darwin-amd64: build agent for Darwin amd64
+agent-build-darwin-amd64:
+	@GOOS=darwin GOARCH=amd64 go build -o bin/agent-darwin-amd64 ./cmd/agent
+
+## agent-build-darwin-arm64: build agent for Darwin arm64 (Apple Silicon)
+agent-build-darwin-arm64:
+	@GOOS=darwin GOARCH=arm64 go build -o bin/agent-darwin-arm64 ./cmd/agent
+	@echo "Agent binaries built:"
+	@ls -lh bin/agent-*
+
 ## docker-build: build all Docker images
 docker-build:
 	@docker compose -f deploy/docker-compose/docker-compose.yml build
@@ -85,9 +110,38 @@ docker-up:
 docker-down:
 	@docker compose -f deploy/docker-compose/docker-compose.yml down
 
+## docker-restart: restart all services
+docker-restart: docker-down docker-up
+
 ## docker-logs: show service logs
 docker-logs:
 	@docker compose -f deploy/docker-compose/docker-compose.yml logs -f
+
+## docker-ps: show running services
+docker-ps:
+	@docker compose -f deploy/docker-compose/docker-compose.yml ps
+
+## offline-save-images: save Docker images for offline deployment
+offline-save-images:
+	@bash deploy/offline/save-images.sh
+
+## offline-build: build offline installer package
+offline-build:
+	@bash deploy/offline/build-offline.sh
+
+## deploy-agent: deploy agent to remote host (usage: make deploy-agent HOST=user@host)
+deploy-agent:
+	@if [ -z "$(HOST)" ]; then echo "Usage: make deploy-agent HOST=user@host [COLLECTOR=http://host:8084]"; exit 1; fi
+	@ssh $(HOST) "bash -s" -- < deploy/agent/install.sh --collector $(COLLECTOR)
+
+## deploy-init-db: initialize databases
+init-db:
+	@echo "Initializing ClickHouse..."
+	@for f in deploy/sql/*.sql; do \
+		echo "Running $$f..."; \
+		clickhouse-client --multiquery < "$$f" 2>/dev/null || true; \
+	done
+	@echo "Done."
 
 ## clean: remove build artifacts
 clean:

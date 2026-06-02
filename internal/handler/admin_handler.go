@@ -1,23 +1,28 @@
 package handler
 
 import (
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"net/http"
+	"os"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"aiops/internal/model"
 	"aiops/internal/repo"
 )
 
-// AdminHandler handles user management and audit logs.
+// AdminHandler handles user management, tenant management, and audit logs.
 type AdminHandler struct {
-	repo *repo.AdminRepo
+	repo       *repo.AdminRepo
+	tenantRepo *repo.TenantRepo
 }
 
-func NewAdminHandler(repo *repo.AdminRepo) *AdminHandler {
-	return &AdminHandler{repo: repo}
+func NewAdminHandler(repo *repo.AdminRepo, tenantRepo *repo.TenantRepo) *AdminHandler {
+	return &AdminHandler{repo: repo, tenantRepo: tenantRepo}
 }
 
 // --- Auth Middleware ---
@@ -115,12 +120,17 @@ func (h *AdminHandler) Login(c *gin.Context) {
 	// Audit log
 	h.auditLog(c, user.ID, user.Username, "login", "auth", "", "登录成功")
 
+	// Generate token: hex(payload):hex(hmac-signature)
+	// payload = "user_id:tenant_id:role:timestamp"
+	token := generateToken(user.ID, user.TenantID, user.Role)
+
 	c.JSON(http.StatusOK, gin.H{
-		"user_id":       user.ID,
-		"username":      user.Username,
-		"display_name":  user.DisplayName,
-		"role":          user.Role,
-		"tenant_id":     user.TenantID,
+		"token":       token,
+		"user_id":     user.ID,
+		"username":    user.Username,
+		"display_name": user.DisplayName,
+		"role":        user.Role,
+		"tenant_id":   user.TenantID,
 	})
 }
 
@@ -301,4 +311,141 @@ func (h *AdminHandler) auditLog(c *gin.Context, userID int64, username, action, 
 func sha256Hash(s string) string {
 	h := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(h[:])
+}
+
+// --- Tenant Management ---
+
+func (h *AdminHandler) ListTenants(c *gin.Context) {
+	limit := parseIntDefault(c.Query("limit"), 20)
+	offset := parseIntDefault(c.Query("offset"), 0)
+
+	tenants, total, err := h.tenantRepo.ListTenants(limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": tenants, "total": total})
+}
+
+func (h *AdminHandler) CreateTenant(c *gin.Context) {
+	var req struct {
+		Name     string `json:"name" binding:"required"`
+		Code     string `json:"code" binding:"required"`
+		Plan     string `json:"plan"`
+		MaxHosts int    `json:"max_hosts"`
+		MaxUsers int    `json:"max_users"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+
+	if req.Plan == "" {
+		req.Plan = "free"
+	}
+	// Apply plan defaults if not explicitly set
+	if limits, ok := model.PlanLimits[req.Plan]; ok && req.MaxHosts == 0 {
+		req.MaxHosts = limits.MaxHosts
+	}
+	if limits, ok := model.PlanLimits[req.Plan]; ok && req.MaxUsers == 0 {
+		req.MaxUsers = limits.MaxUsers
+	}
+
+	tenant := &model.Tenant{
+		Name:     req.Name,
+		Code:     req.Code,
+		Plan:     req.Plan,
+		MaxHosts: req.MaxHosts,
+		MaxUsers: req.MaxUsers,
+	}
+
+	if err := h.tenantRepo.CreateTenant(tenant); err != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": "租户编码已存在"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, tenant)
+}
+
+func (h *AdminHandler) UpdateTenant(c *gin.Context) {
+	id := parseInt64Default(c.Param("id"), 0)
+	tenant, err := h.tenantRepo.GetTenant(id)
+	if err != nil || tenant == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "租户不存在"})
+		return
+	}
+
+	var req struct {
+		Name     string `json:"name"`
+		Code     string `json:"code"`
+		Status   string `json:"status"`
+		Plan     string `json:"plan"`
+		MaxHosts int    `json:"max_hosts"`
+		MaxUsers int    `json:"max_users"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+
+	if req.Name != "" {
+		tenant.Name = req.Name
+	}
+	if req.Code != "" {
+		tenant.Code = req.Code
+	}
+	if req.Status != "" {
+		tenant.Status = req.Status
+	}
+	if req.Plan != "" {
+		tenant.Plan = req.Plan
+	}
+	if req.MaxHosts > 0 {
+		tenant.MaxHosts = req.MaxHosts
+	}
+	if req.MaxUsers > 0 {
+		tenant.MaxUsers = req.MaxUsers
+	}
+
+	if err := h.tenantRepo.UpdateTenant(tenant); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, tenant)
+}
+
+func (h *AdminHandler) DeleteTenant(c *gin.Context) {
+	id := parseInt64Default(c.Param("id"), 0)
+	if id == 1 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "不能删除默认租户"})
+		return
+	}
+	if err := h.tenantRepo.DeleteTenant(id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+// jwtSecret must match the gateway's JWT_SECRET env var.
+var jwtSecret = envOrDefault("JWT_SECRET", "aiops-dev-secret-key")
+
+func envOrDefault(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
+// generateToken creates a HMAC-SHA256 signed token for the gateway to validate.
+// Format: hex(payload):hex(signature) where payload = "user_id:tenant_id:role:timestamp"
+func generateToken(userID, tenantID int64, role string) string {
+	payload := fmt.Sprintf("%d:%d:%s:%s", userID, tenantID, role, time.Now().UTC().Format(time.RFC3339))
+	payloadHex := hex.EncodeToString([]byte(payload))
+
+	mac := hmac.New(sha256.New, []byte(jwtSecret))
+	mac.Write([]byte(payload))
+	signature := hex.EncodeToString(mac.Sum(nil))
+
+	return payloadHex + ":" + signature
 }

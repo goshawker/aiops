@@ -7,6 +7,8 @@ require (
 	github.com/gin-gonic/gin v1.10.0
 	github.com/mattn/go-sqlite3 v1.14.23
 	github.com/segmentio/kafka-go v0.4.47
+	github.com/stretchr/testify v1.9.0
+	github.com/stretchr/objx v0.5.2
 	gopkg.in/yaml.v3 v3.0.1
 )
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -13,6 +14,7 @@ import (
 	"aiops/internal/config"
 	"aiops/internal/handler"
 	"aiops/internal/repo"
+	"aiops/internal/service"
 )
 
 func main() {
@@ -32,6 +34,12 @@ func main() {
 
 	jobRepo := repo.NewJobRepo(db)
 	jobHandler := handler.NewJobHandler(jobRepo)
+
+	// Start cron scheduler
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	scheduler := service.NewCronScheduler(jobRepo)
+	go scheduler.Start(ctx)
 
 	r := gin.Default()
 
@@ -63,5 +71,6 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
+	cancel()
 	log.Println("Shutting down job engine...")
 }

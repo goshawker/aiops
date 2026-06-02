@@ -16,3 +16,9 @@ scrape_configs:
           - "admin-service:8083"
           - "collector-service:8084"
           - "job-engine:8085"
+
+  - job_name: "aiops-agents"
+    metrics_path: "/metrics"
+    scrape_interval: 30s
+    http_sd_configs:
+      - url: "http://collector-service:8084/api/v1/collectors/scrape-targets"

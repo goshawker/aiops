@@ -31,7 +31,8 @@ func main() {
 	defer db.Close()
 
 	adminRepo := repo.NewAdminRepo(db)
-	adminHandler := handler.NewAdminHandler(adminRepo)
+	tenantRepo := repo.NewTenantRepo(db)
+	adminHandler := handler.NewAdminHandler(adminRepo, tenantRepo)
 
 	r := gin.Default()
 
@@ -60,6 +61,16 @@ func main() {
 
 		// Audit logs (admin/operator can read)
 		auth.GET("/audit-logs", adminHandler.ListAuditLogs)
+
+		// Tenant management (admin only)
+		tenants := auth.Group("/tenants")
+		tenants.Use(handler.RequirePermission("manage_users"))
+		{
+			tenants.GET("", adminHandler.ListTenants)
+			tenants.POST("", adminHandler.CreateTenant)
+			tenants.PUT("/:id", adminHandler.UpdateTenant)
+			tenants.DELETE("/:id", adminHandler.DeleteTenant)
+		}
 	}
 
 	go func() {

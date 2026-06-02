@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"aiops/internal/config"
 	"aiops/internal/handler"
@@ -41,9 +42,18 @@ func main() {
 		log.Fatalf("init schema: %v", err)
 	}
 
-	// Repository and service
+	// Repositories
 	alertRepo := repo.NewAlertRepo(db)
-	alertSvc := service.NewAlertService(alertRepo)
+	alertRuleRepo := repo.NewAlertRuleRepo(db)
+
+	// VictoriaMetrics client (optional — rule evaluation needs it)
+	var vmClient *repo.VMClient
+	if cfg.VM.URL != "" {
+		vmClient = repo.NewVMClient(cfg.VM)
+	}
+
+	// Service
+	alertSvc := service.NewAlertService(alertRepo, alertRuleRepo, vmClient)
 	alertHdl := handler.NewAlertHandler(alertSvc)
 
 	// Kafka consumers
@@ -55,6 +65,9 @@ func main() {
 
 	incidentsConsumer := kafkax.NewConsumer(cfg.Kafka.Brokers, "aiops.incidents", "alert-engine")
 	go incidentsConsumer.Consume(ctx, alertSvc.ProcessIncident)
+
+	// Start rule evaluator (checks threshold rules every 30s)
+	go alertSvc.StartRuleEvaluator(ctx, 30*time.Second)
 
 	// HTTP server
 	r := gin.Default()
@@ -70,6 +83,13 @@ func main() {
 	r.GET("/api/v1/alerts/incidents", alertHdl.ListIncidents)
 	r.POST("/api/v1/alerts/incidents/:id/acknowledge", alertHdl.AcknowledgeIncident)
 	r.POST("/api/v1/alerts/incidents/:id/resolve", alertHdl.ResolveIncident)
+
+	// Alert rules
+	r.GET("/api/v1/alerts/rules", alertHdl.ListRules)
+	r.POST("/api/v1/alerts/rules", alertHdl.CreateRule)
+	r.GET("/api/v1/alerts/rules/:id", alertHdl.GetRule)
+	r.PUT("/api/v1/alerts/rules/:id", alertHdl.UpdateRule)
+	r.DELETE("/api/v1/alerts/rules/:id", alertHdl.DeleteRule)
 
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
 	log.Printf("alert engine starting on %s", addr)

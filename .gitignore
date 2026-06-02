@@ -15,6 +15,7 @@ bin/
 
 # Go
 coverage.out
+cover.out
 *.test
 
 # Python
@@ -55,3 +56,5 @@ deploy/docker-compose/data/
 
 # Logs
 *.log
+.gstack/
+.claude/

@@ -1,0 +1,9 @@
+server:
+  port: 8085
+
+sqlite:
+  path: "data/collector.db"
+
+logging:
+  level: "debug"
+  file: "logs/collector.log"

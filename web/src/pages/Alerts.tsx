@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Card, Table, Tag, Button, Space, Tabs, Typography, message, Select, Row, Col, Statistic } from 'antd'
+import { Card, Table, Tag, Button, Space, Tabs, message, Select, Row, Col, Statistic } from 'antd'
 import {
   CheckOutlined,
   CheckCircleOutlined,
@@ -10,8 +10,6 @@ import {
 } from '@ant-design/icons'
 import { alertsApi } from '@/api'
 import type { AlertEvent, Incident } from '@/api/alerts'
-
-const { Title } = Typography
 
 const severityColor = (s: string) => {
   if (s === 'critical') return 'red'
@@ -169,10 +167,7 @@ export default function Alerts() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <Title level={4} style={{ margin: 0 }}>
-          <AlertOutlined /> 告警管理
-        </Title>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
         <Button icon={<ReloadOutlined />} onClick={loadData} loading={loading}>
           刷新
         </Button>

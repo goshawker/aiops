@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
 import { Card, Table, Tag, Space, Typography, Select, message, Tooltip } from 'antd'
-import { BranchesOutlined } from '@ant-design/icons'
+
 import ReactECharts from 'echarts-for-react'
 import client from '@/api/client'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 
 interface TraceSummary {
   trace_id: string
@@ -217,10 +217,6 @@ export default function Traces() {
 
   return (
     <div>
-      <Title level={4}>
-        <BranchesOutlined /> 链路追踪
-      </Title>
-
       {/* Filters */}
       <Card size="small" style={{ marginBottom: 16 }}>
         <Space>

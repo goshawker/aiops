@@ -1,14 +1,19 @@
 package main
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -38,6 +43,21 @@ var upstreams = map[string]string{
 	"llm":       envOr("UPSTREAM_LLM", "http://localhost:5004"),
 }
 
+// jwtSecret is used for HMAC-SHA256 token validation.
+// In production, set JWT_SECRET env var; default is for dev only.
+var jwtSecret = envOr("JWT_SECRET", "aiops-dev-secret-key")
+
+// noAuthPaths are paths that don't require authentication.
+var noAuthPaths = map[string]bool{
+	"/health":                          true,
+	"/version":                         true,
+	"/api/v1/auth/login":               true,
+	"/api/v1/agent/install.sh":         true,
+	"/api/v1/agent/download":           true,
+	"/api/v1/collectors/scrape-targets": true,
+	"/api/v1/collectors":               true,
+}
+
 func envOr(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
@@ -58,6 +78,7 @@ func main() {
 
 	// ── API v1 Routes ─────────────────────────
 	v1 := r.Group("/api/v1")
+	v1.Use(authMiddleware())
 	{
 		// Metrics (→ query)
 		v1.POST("/metrics/query", proxy("query"))
@@ -75,6 +96,13 @@ func main() {
 		v1.POST("/alerts/incidents/:id/acknowledge", proxy("alert"))
 		v1.POST("/alerts/incidents/:id/resolve", proxy("alert"))
 
+		// Alert rules
+		v1.GET("/alerts/rules", proxy("alert"))
+		v1.POST("/alerts/rules", proxy("alert"))
+		v1.GET("/alerts/rules/:id", proxy("alert"))
+		v1.PUT("/alerts/rules/:id", proxy("alert"))
+		v1.DELETE("/alerts/rules/:id", proxy("alert"))
+
 		// Alert aggregation (→ alert-agg)
 		v1.POST("/alerts/aggregate", proxy("alert-agg"))
 		v1.GET("/alerts/aggregate/incidents", proxy("alert-agg"))
@@ -87,6 +115,19 @@ func main() {
 		v1.GET("/admin/config", proxy("admin"))
 		v1.PUT("/admin/config", proxy("admin"))
 		v1.GET("/admin/audit-logs", proxy("admin"))
+
+		// Auth & tenants
+		v1.POST("/auth/login", proxy("admin"))
+		v1.GET("/auth/me", proxy("admin"))
+		v1.GET("/tenants", proxy("admin"))
+		v1.POST("/tenants", proxy("admin"))
+		v1.PUT("/tenants/:id", proxy("admin"))
+		v1.DELETE("/tenants/:id", proxy("admin"))
+			// Collector API (for frontend agent management)
+			v1.GET("/collectors", proxy("collector"))
+			v1.GET("/collectors/status", proxy("collector"))
+				v1.GET("/collectors/scrape-targets", proxy("collector"))
+			v1.GET("/collectors/:id", proxy("collector"))
 
 		// Jobs
 		v1.GET("/jobs", proxy("job"))
@@ -165,6 +206,93 @@ type HealthResponse struct {
 	Service   string            `json:"service"`
 	Version   string            `json:"version"`
 	Upstreams map[string]string `json:"upstreams"`
+}
+
+// authMiddleware validates JWT-style tokens and sets user context headers.
+// Token format: HMAC-SHA256(payload, secret) where payload = "user_id:tenant_id:role:timestamp"
+// Full token: base64(payload):hex(signature)
+func authMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		path := c.Request.URL.Path
+
+		// Skip auth for whitelisted paths
+		if noAuthPaths[path] {
+			c.Next()
+			return
+		}
+
+		// Also skip for health/version
+		if path == "/health" || path == "/version" {
+			c.Next()
+			return
+		}
+
+		// Extract token from Authorization header
+		authHeader := c.GetHeader("Authorization")
+		if authHeader == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+			c.Abort()
+			return
+		}
+
+		// Support Bearer token format
+		token := authHeader
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			token = strings.TrimPrefix(authHeader, "Bearer ")
+		}
+
+		// Validate token
+		userID, tenantID, role, err := validateToken(token)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "无效凭证"})
+			c.Abort()
+			return
+		}
+
+		// Set user context headers for downstream services
+		c.Request.Header.Set("X-User-ID", userID)
+		c.Request.Header.Set("X-Tenant-ID", tenantID)
+		c.Request.Header.Set("X-Role", role)
+		c.Next()
+	}
+}
+
+// validateToken parses and validates a HMAC-SHA256 token.
+// Returns user_id, tenant_id, role on success.
+func validateToken(token string) (string, string, string, error) {
+	parts := strings.SplitN(token, ":", 2)
+	if len(parts) != 2 {
+		return "", "", "", fmt.Errorf("invalid token format")
+	}
+
+	payload, err := hex.DecodeString(parts[0])
+	if err != nil {
+		return "", "", "", fmt.Errorf("invalid token encoding")
+	}
+	signature := parts[1]
+
+	// Verify signature
+	mac := hmac.New(sha256.New, []byte(jwtSecret))
+	mac.Write(payload)
+	expectedSig := hex.EncodeToString(mac.Sum(nil))
+	if !hmac.Equal([]byte(signature), []byte(expectedSig)) {
+		return "", "", "", fmt.Errorf("invalid token signature")
+	}
+
+	// Parse payload: user_id:tenant_id:role:timestamp
+	payloadStr := string(payload)
+	fields := strings.SplitN(payloadStr, ":", 4)
+	if len(fields) != 4 {
+		return "", "", "", fmt.Errorf("invalid token payload")
+	}
+
+	// Check token expiry (24 hours)
+	ts, err := time.Parse(time.RFC3339, fields[3])
+	if err == nil && time.Since(ts) > 24*time.Hour {
+		return "", "", "", fmt.Errorf("token expired")
+	}
+
+	return fields[0], fields[1], fields[2], nil
 }
 
 func handleHealth(c *gin.Context) {

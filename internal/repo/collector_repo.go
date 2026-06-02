@@ -104,7 +104,7 @@ func (r *CollectorRepo) DeleteCollector(id int64) error {
 func (r *CollectorRepo) MarkStaleCollectors() error {
 	_, err := r.db.Exec(
 		`UPDATE collectors SET status='offline', updated_at=? WHERE status='online' AND last_heartbeat < ?`,
-		time.Now(), time.Now().Add(-5*time.Minute),
+		time.Now(), time.Now().Add(-90*time.Second),
 	)
 	return err
 }

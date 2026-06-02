@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -201,5 +202,58 @@ func (h *CollectorHandler) Status(c *gin.Context) {
 		"online":  len(online),
 		"offline": len(total) - len(online),
 	})
+}
+
+// ScrapeTargets returns Prometheus HTTP SD targets for all online agents.
+// GET /api/v1/collectors/scrape-targets
+// Format: https://prometheus.io/docs/prometheus/latest/http_sd/
+func (h *CollectorHandler) ScrapeTargets(c *gin.Context) {
+	online, _, _ := h.repo.ListCollectors(1000, 0, "online")
+
+	type target struct {
+		Targets []string          `json:"targets"`
+		Labels  map[string]string `json:"labels"`
+	}
+
+	var groups []target
+	for _, agent := range online {
+		ip := agent.IP
+		if ip == "" || ip == agent.Name {
+			ip = agent.Hostname
+		}
+		groups = append(groups, target{
+			Targets: []string{fmt.Sprintf("%s:9101", ip)},
+			Labels: map[string]string{
+				"agent_id":   fmt.Sprintf("%d", agent.ID),
+				"agent_name": agent.Name,
+				"hostname":   agent.Hostname,
+				"version":    agent.Version,
+			},
+		})
+	}
+
+	c.JSON(http.StatusOK, groups)
+}
+
+// DownloadAgent serves the agent binary for the target platform.
+// GET /api/v1/collectors/download/:os-:arch
+func (h *CollectorHandler) DownloadAgent(c *gin.Context) {
+	osarch := c.Param("osarch") // e.g. "linux-amd64", "linux-arm64"
+	agentDir := c.GetString("agent_dir")
+	if agentDir == "" {
+		agentDir = "deploy/agent"
+	}
+	filePath := fmt.Sprintf("%s/aiops-agent-%s", agentDir, osarch)
+	c.File(filePath)
+}
+
+// ServeInstallScript serves the install.sh script.
+// GET /api/v1/collectors/install.sh
+func (h *CollectorHandler) ServeInstallScript(c *gin.Context) {
+	agentDir := c.GetString("agent_dir")
+	if agentDir == "" {
+		agentDir = "deploy/agent"
+	}
+	c.File(fmt.Sprintf("%s/install.sh", agentDir))
 }
 

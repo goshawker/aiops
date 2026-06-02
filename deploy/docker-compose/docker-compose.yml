@@ -344,6 +344,8 @@ services:
     volumes:
       - ../../web/dist:/usr/share/nginx/html:ro
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ../../deploy/agent:/opt/aiops/agent:ro   # Agent installer
+      - ../../bin:/opt/aiops/bin:ro               # Agent binaries
     depends_on:
       - gateway
     restart: unless-stopped

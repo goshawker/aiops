@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class MetricPoint:
     """A single metric data point."""
+    metric_name: str
     timestamp: float
     value: float
     labels: dict = field(default_factory=dict)
