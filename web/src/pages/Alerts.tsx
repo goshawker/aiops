@@ -17,6 +17,7 @@ import {
 } from '@ant-design/icons'
 import { alertsApi } from '@/api'
 import type { AlertEvent, Incident, AlertRule } from '@/api/alerts'
+import JsonEditor from '@/components/JsonEditor'
 
 const severityColor = (s: string) => {
   if (s === 'critical') return 'red'
@@ -37,6 +38,8 @@ const ruleTypeLabel: Record<string, string> = {
   log_pattern: '日志模式',
 }
 
+const PAGE_SIZE = 50
+
 export default function Alerts() {
   const [events, setEvents] = useState<AlertEvent[]>([])
   const [incidents, setIncidents] = useState<Incident[]>([])
@@ -46,34 +49,83 @@ export default function Alerts() {
   const [severityFilter, setSeverityFilter] = useState<string>('')
   const [statusFilter, setStatusFilter] = useState<string>('')
 
+  // Server-side pagination
+  const [incidentPagination, setIncidentPagination] = useState({ current: 1, total: 0 })
+  const [eventPagination, setEventPagination] = useState({ current: 1, total: 0 })
+  const [rulePagination, setRulePagination] = useState({ current: 1, total: 0 })
+
   // Rule modal
   const [ruleModalOpen, setRuleModalOpen] = useState(false)
   const [editingRule, setEditingRule] = useState<AlertRule | null>(null)
   const [ruleSaving, setRuleSaving] = useState(false)
   const [ruleForm] = Form.useForm()
 
-  useEffect(() => {
-    loadData()
-  }, [tab])
-
-  const loadData = async () => {
+  const loadIncidents = async (page = 1) => {
     setLoading(true)
     try {
-      if (tab === 'incidents') {
-        const res = await alertsApi.listIncidents({ limit: 200 })
-        setIncidents(res.data || [])
-      } else if (tab === 'events') {
-        const res = await alertsApi.listEvents({ limit: 200 })
-        setEvents(res.data || [])
-      } else if (tab === 'rules') {
-        const res = await alertsApi.listRules({ limit: 200 })
-        setRules(res.data || [])
+      const res = await alertsApi.listIncidents({
+        status: statusFilter || undefined,
+        limit: PAGE_SIZE,
+        offset: (page - 1) * PAGE_SIZE,
+      })
+      setIncidents(res.data || [])
+      setIncidentPagination({ current: page, total: res.total || 0 })
+    } catch (e: any) {
+      message.error(e?.error || '加载事件数据失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const loadEvents = async (page = 1) => {
+    setLoading(true)
+    try {
+      const res = await alertsApi.listEvents({
+        status: severityFilter ? undefined : undefined,
+        limit: PAGE_SIZE,
+        offset: (page - 1) * PAGE_SIZE,
+      })
+      // Severity filter is client-side (API doesn't support it)
+      let data = res.data || []
+      if (severityFilter) {
+        data = data.filter((e) => e.severity === severityFilter)
       }
+      setEvents(data)
+      setEventPagination({ current: page, total: res.total || 0 })
     } catch (e: any) {
       message.error(e?.error || '加载告警数据失败')
     } finally {
       setLoading(false)
     }
+  }
+
+  const loadRules = async (page = 1) => {
+    setLoading(true)
+    try {
+      const res = await alertsApi.listRules({
+        limit: PAGE_SIZE,
+        offset: (page - 1) * PAGE_SIZE,
+      })
+      setRules(res.data || [])
+      setRulePagination({ current: page, total: res.total || 0 })
+    } catch (e: any) {
+      message.error(e?.error || '加载规则数据失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (tab === 'incidents') loadIncidents(1)
+    else if (tab === 'events') loadEvents(1)
+    else if (tab === 'rules') loadRules(1)
+  }, [tab, statusFilter])
+
+  // Reload current page
+  const loadData = () => {
+    if (tab === 'incidents') loadIncidents(incidentPagination.current)
+    else if (tab === 'events') loadEvents(eventPagination.current)
+    else if (tab === 'rules') loadRules(rulePagination.current)
   }
 
   const handleAcknowledge = async (id: number) => {
@@ -160,19 +212,7 @@ export default function Alerts() {
     }
   }
 
-  // Apply filters
-  const filteredIncidents = incidents.filter((i) => {
-    if (severityFilter && i.severity !== severityFilter) return false
-    if (statusFilter && i.status !== statusFilter) return false
-    return true
-  })
-
-  const filteredEvents = events.filter((e) => {
-    if (severityFilter && e.severity !== severityFilter) return false
-    return true
-  })
-
-  // Stats
+  // Stats (from current page data)
   const criticalCount = incidents.filter((i) => i.severity === 'critical').length
   const warningCount = incidents.filter((i) => i.severity === 'warning').length
   const openCount = incidents.filter((i) => i.status === 'open').length
@@ -289,7 +329,7 @@ export default function Alerts() {
               <Card size="small">
                 <Statistic
                   title="规则总数"
-                  value={rules.length}
+                  value={rulePagination.total}
                   prefix={<SettingOutlined />}
                 />
               </Card>
@@ -318,8 +358,8 @@ export default function Alerts() {
             <Col span={6}>
               <Card size="small">
                 <Statistic
-                  title="活跃事件"
-                  value={incidents.length}
+                  title="事件总数"
+                  value={incidentPagination.total}
                   prefix={<AlertOutlined />}
                   valueStyle={{ color: openCount > 0 ? '#faad14' : '#52c41a' }}
                 />
@@ -387,37 +427,51 @@ export default function Alerts() {
           items={[
             {
               key: 'incidents',
-              label: `事件 (${filteredIncidents.length})`,
+              label: `事件 (${incidentPagination.total})`,
               children: (
                 <Table
-                  dataSource={filteredIncidents}
+                  dataSource={incidents}
                   columns={incidentColumns}
                   rowKey="id"
                   loading={loading}
                   size="small"
-                  scroll={{ x: 900 }}
-                  pagination={{ pageSize: 20, showTotal: (t) => `共 ${t} 条` }}
+                  virtual
+                  scroll={{ x: 900, y: 600 }}
+                  pagination={{
+                    current: incidentPagination.current,
+                    pageSize: PAGE_SIZE,
+                    total: incidentPagination.total,
+                    showTotal: (t) => `共 ${t} 条`,
+                    onChange: (page) => loadIncidents(page),
+                  }}
                 />
               ),
             },
             {
               key: 'events',
-              label: `告警 (${filteredEvents.length})`,
+              label: `告警 (${eventPagination.total})`,
               children: (
                 <Table
-                  dataSource={filteredEvents}
+                  dataSource={events}
                   columns={eventColumns}
                   rowKey="id"
                   loading={loading}
                   size="small"
-                  scroll={{ x: 900 }}
-                  pagination={{ pageSize: 20, showTotal: (t) => `共 ${t} 条` }}
+                  virtual
+                  scroll={{ x: 900, y: 600 }}
+                  pagination={{
+                    current: eventPagination.current,
+                    pageSize: PAGE_SIZE,
+                    total: eventPagination.total,
+                    showTotal: (t) => `共 ${t} 条`,
+                    onChange: (page) => loadEvents(page),
+                  }}
                 />
               ),
             },
             {
               key: 'rules',
-              label: `规则 (${rules.length})`,
+              label: `规则 (${rulePagination.total})`,
               children: (
                 <Table
                   dataSource={rules}
@@ -425,8 +479,15 @@ export default function Alerts() {
                   rowKey="id"
                   loading={loading}
                   size="small"
-                  scroll={{ x: 900 }}
-                  pagination={{ pageSize: 20, showTotal: (t) => `共 ${t} 条` }}
+                  virtual
+                  scroll={{ x: 900, y: 600 }}
+                  pagination={{
+                    current: rulePagination.current,
+                    pageSize: PAGE_SIZE,
+                    total: rulePagination.total,
+                    showTotal: (t) => `共 ${t} 条`,
+                    onChange: (page) => loadRules(page),
+                  }}
                 />
               ),
             },
@@ -488,10 +549,7 @@ export default function Alerts() {
               },
             ]}
           >
-            <Input.TextArea
-              rows={4}
-              placeholder={'{\n  "metric": "cpu_usage",\n  "threshold": 80,\n  "duration": "5m"\n}'}
-            />
+            <JsonEditor height={140} placeholder={'{\n  "metric": "cpu_usage",\n  "threshold": 80,\n  "duration": "5m"\n}'} />
           </Form.Item>
           <Form.Item name="enabled" label="启用" valuePropName="checked">
             <Switch />
@@ -509,7 +567,7 @@ export default function Alerts() {
               },
             ]}
           >
-            <Input.TextArea rows={3} placeholder={'{\n  "channels": ["webhook"],\n  "webhook_url": ""\n}'} />
+            <JsonEditor height={100} placeholder={'{\n  "channels": ["webhook"],\n  "webhook_url": ""\n}'} />
           </Form.Item>
           <Form.Item
             name="silence_config"
@@ -524,7 +582,7 @@ export default function Alerts() {
               },
             ]}
           >
-            <Input.TextArea rows={2} placeholder={'{\n  "duration": "30m"\n}'} />
+            <JsonEditor height={80} placeholder={'{\n  "duration": "30m"\n}'} />
           </Form.Item>
         </Form>
       </Modal>
