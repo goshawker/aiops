@@ -81,7 +81,6 @@ export default function Alerts() {
     setLoading(true)
     try {
       const res = await alertsApi.listEvents({
-        status: severityFilter ? undefined : undefined,
         limit: PAGE_SIZE,
         offset: (page - 1) * PAGE_SIZE,
       })

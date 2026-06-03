@@ -187,8 +187,10 @@ export default function RCA() {
                 dataSource={results}
                 renderItem={(item: RootCause, index: number) => (
                   <List.Item
-                    style={{ cursor: 'pointer', padding: '12px 8px', borderRadius: 6, transition: 'background 0.2s' }}
-                    className={highlightNode === item.metric_name ? 'rca-highlighted' : ''}
+                    style={{
+                      cursor: 'pointer', padding: '12px 8px', borderRadius: 6, transition: 'background 0.2s',
+                      background: highlightNode === item.metric_name ? '#f0f5ff' : undefined,
+                    }}
                     onClick={() => handleHighlightRootCause(item.metric_name)}
                   >
                     <div style={{ width: '100%' }}>
@@ -264,11 +266,6 @@ export default function RCA() {
           <ReactECharts ref={chartRef} option={getGraphOption()} style={{ height: 400 }} />
         </Card>
       )}
-
-      <style>{`
-        .rca-highlighted { background: #f0f5ff !important; }
-        .ant-list-item:hover { background: #fafafa; }
-      `}</style>
     </div>
   )
 }

@@ -348,6 +348,7 @@ export default function MainLayout() {
     searchVisible, setSearchVisible,
     notificationCount,
     assistantVisible, setAssistantVisible,
+    user,
   } = useAppStore()
 
   // Derive current module from pathname
@@ -562,7 +563,7 @@ export default function MainLayout() {
             <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
               <Space style={{ cursor: 'pointer' }}>
                 <Avatar size={28} icon={<UserOutlined />} style={{ background: '#1677ff' }} />
-                <span style={{ fontSize: 13, color: isDark ? '#ccc' : '#333' }}>admin</span>
+                <span style={{ fontSize: 13, color: isDark ? '#ccc' : '#333' }}>{user?.username || 'admin'}</span>
               </Space>
             </Dropdown>
           </Space>

@@ -77,7 +77,7 @@ export default function Anomaly() {
         }))
         setEvents(mapped)
       } catch (err) {
-        console.error('Failed to load anomaly events:', err)
+        message.error('加载异常事件失败')
       }
     }
     loadEvents()
@@ -94,7 +94,7 @@ export default function Anomaly() {
     setDetectLoading(true)
     try {
       const res = await client.post('/anomaly/detect', values)
-      setResult(res)
+      setResult(res.data)
     } catch (e) { message.error('检测失败') }
     finally { setDetectLoading(false) }
   }

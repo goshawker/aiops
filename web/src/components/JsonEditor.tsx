@@ -23,7 +23,7 @@ export default function JsonEditor({ value, onChange, height = 120, placeholder 
   }, [height])
 
   return (
-    <div style={{ border: '1px solid #d9d9d9', borderRadius: 6, overflow: 'hidden' }}>
+    <div style={{ border: '1px solid #d9d9d9', borderRadius: 6, overflow: 'hidden', position: 'relative' }}>
       <Editor
         height={height}
         language="json"

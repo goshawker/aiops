@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Card, Row, Col, Tag, List, Typography, Progress, Space, Button } from 'antd'
+import { useNavigate } from 'react-router-dom'
+import { Card, Row, Col, Tag, List, Typography, Progress, Space, Button, message } from 'antd'
 import {
   AlertOutlined,
   DashboardOutlined,
@@ -33,6 +34,7 @@ export default function Dashboard() {
     info: Array(24).fill(0),
   })
   const { setAssistantVisible } = useAppStore()
+  const navigate = useNavigate()
 
   useEffect(() => { loadData() }, [])
 
@@ -99,7 +101,7 @@ export default function Dashboard() {
         setHealthScore(cpu > 90 || mem > 95 ? 30 : cpu > 70 || mem > 80 ? 65 : 95)
       }
     } catch (e) {
-      console.error('Failed to load dashboard:', e)
+      message.error('加载仪表盘数据失败')
     } finally { setLoading(false) }
   }
 
@@ -295,7 +297,7 @@ export default function Dashboard() {
             </Card>
             <Card title="快捷操作" size="small" styles={{ body: { padding: 16 } }}>
               <Space direction="vertical" style={{ width: '100%' }} size={12}>
-                <Button block icon={<ApartmentOutlined />} onClick={() => window.location.href = '/rca'}>根因分析</Button>
+                <Button block icon={<ApartmentOutlined />} onClick={() => navigate('/rca')}>根因分析</Button>
                 <Button block icon={<MessageOutlined />} onClick={() => setAssistantVisible(true)}>AI 助手</Button>
                 <Button block icon={<ThunderboltOutlined />}>执行作业</Button>
               </Space>
