@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { Card, Typography, Tag, Space, Spin } from 'antd'
+import { useState, useEffect, useMemo } from 'react'
+import { Card, Typography, Tag, Space, Spin, Descriptions, Drawer } from 'antd'
 import { ClusterOutlined } from '@ant-design/icons'
 import ReactECharts from 'echarts-for-react'
 import client from '@/api/client'
@@ -26,9 +26,25 @@ const NODE_COLORS: Record<string, string> = {
   alert: '#ff4d4f',
 }
 
+function getNodeType(name: string): string {
+  if (name.startsWith('host-')) return 'host'
+  if (name.startsWith('svc-')) return 'service'
+  if (name.startsWith('cmp-')) return 'component'
+  return 'metric'
+}
+
+const typeLabel: Record<string, string> = {
+  host: '主机',
+  service: '服务',
+  component: '组件',
+  metric: '指标',
+}
+
 export default function Topology() {
   const [graph, setGraph] = useState<GraphData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [detailOpen, setDetailOpen] = useState(false)
+  const [selectedNode, setSelectedNode] = useState<string | null>(null)
 
   useEffect(() => {
     loadGraph()
@@ -46,15 +62,19 @@ export default function Topology() {
     }
   }
 
+  // Compute edges connected to selected node
+  const nodeEdges = useMemo(() => {
+    if (!selectedNode || !graph) return { incoming: [], outgoing: [] }
+    const incoming = graph.edges.filter((e) => e.target === selectedNode)
+    const outgoing = graph.edges.filter((e) => e.source === selectedNode)
+    return { incoming, outgoing }
+  }, [selectedNode, graph])
+
   const getOption = () => {
     if (!graph || graph.nodes.length === 0) return null
 
     const nodes = graph.nodes.map((name) => {
-      const type = name.startsWith('host-') ? 'host'
-        : name.startsWith('svc-') ? 'service'
-        : name.startsWith('cmp-') ? 'component'
-        : 'metric'
-
+      const type = getNodeType(name)
       return {
         id: name,
         name: name.replace(/^(host-|svc-|cmp-)/, ''),
@@ -88,7 +108,8 @@ export default function Topology() {
           if (params.dataType === 'edge') {
             return `${params.data.source} → ${params.data.target}<br/>置信度: ${((params.data.value || 0) * 100).toFixed(0)}%`
           }
-          return `${params.name}<br/>类型: ${params.data.category}`
+          const type = getNodeType(params.data.id)
+          return `<b>${params.name}</b><br/>类型: ${typeLabel[type] || type}`
         },
       },
       legend: {
@@ -145,7 +166,18 @@ export default function Topology() {
             <Spin size="large" />
           </div>
         ) : graph && graph.nodes.length > 0 ? (
-          <ReactECharts option={getOption()} style={{ height: 500 }} />
+          <ReactECharts
+            option={getOption()}
+            style={{ height: 500 }}
+            onEvents={{
+              click: (params: any) => {
+                if (params.dataType === 'node' && params.data?.id) {
+                  setSelectedNode(params.data.id)
+                  setDetailOpen(true)
+                }
+              },
+            }}
+          />
         ) : (
           <div style={{ height: 500, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#999' }}>
             <ClusterOutlined style={{ fontSize: 48, marginBottom: 16 }} />
@@ -154,6 +186,65 @@ export default function Topology() {
           </div>
         )}
       </Card>
+
+      {/* Node detail drawer */}
+      <Drawer
+        title="节点详情"
+        open={detailOpen}
+        onClose={() => { setDetailOpen(false); setSelectedNode(null) }}
+        width={480}
+        destroyOnClose
+      >
+        {selectedNode && (
+          <Space direction="vertical" size={16} style={{ width: '100%' }}>
+            <Descriptions column={1} size="small" bordered>
+              <Descriptions.Item label="节点名称">
+                <Text code copyable>{selectedNode}</Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="类型">
+                <Tag color={NODE_COLORS[getNodeType(selectedNode)]}>
+                  {typeLabel[getNodeType(selectedNode)]}
+                </Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="关系数">
+                {nodeEdges.incoming.length + nodeEdges.outgoing.length}
+              </Descriptions.Item>
+            </Descriptions>
+
+            {nodeEdges.incoming.length > 0 && (
+              <Card title={`上游节点 (${nodeEdges.incoming.length})`} size="small">
+                {nodeEdges.incoming.map((e, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f0f0f0' }}>
+                    <Space>
+                      <Tag color={NODE_COLORS[getNodeType(e.source)]} style={{ fontSize: 11 }}>
+                        {typeLabel[getNodeType(e.source)]}
+                      </Tag>
+                      <Text style={{ fontSize: 12 }}>{e.source.replace(/^(host-|svc-|cmp-)/, '')}</Text>
+                    </Space>
+                    <Tag>{(e.confidence * 100).toFixed(0)}%</Tag>
+                  </div>
+                ))}
+              </Card>
+            )}
+
+            {nodeEdges.outgoing.length > 0 && (
+              <Card title={`下游节点 (${nodeEdges.outgoing.length})`} size="small">
+                {nodeEdges.outgoing.map((e, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f0f0f0' }}>
+                    <Space>
+                      <Tag color={NODE_COLORS[getNodeType(e.target)]} style={{ fontSize: 11 }}>
+                        {typeLabel[getNodeType(e.target)]}
+                      </Tag>
+                      <Text style={{ fontSize: 12 }}>{e.target.replace(/^(host-|svc-|cmp-)/, '')}</Text>
+                    </Space>
+                    <Tag>{(e.confidence * 100).toFixed(0)}%</Tag>
+                  </div>
+                ))}
+              </Card>
+            )}
+          </Space>
+        )}
+      </Drawer>
     </div>
   )
 }
