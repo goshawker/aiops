@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { Card, Typography, Input, Button, Space, Tag, message, Row, Col, List, Progress } from 'antd'
-import { SearchOutlined } from '@ant-design/icons'
+import { useState, useRef } from 'react'
+import { Card, Typography, Input, Button, Space, Tag, message, Row, Col, List, Progress, Tooltip } from 'antd'
+import { SearchOutlined, AimOutlined } from '@ant-design/icons'
 import ReactECharts from 'echarts-for-react'
 import client from '@/api/client'
 
@@ -30,6 +30,8 @@ export default function RCA() {
   const [results, setResults] = useState<RootCause[]>([])
   const [graph, setGraph] = useState<CausalGraph | null>(null)
   const [loading, setLoading] = useState(false)
+  const [highlightNode, setHighlightNode] = useState<string | null>(null)
+  const chartRef = useRef<any>(null)
 
   const handleAnalyze = async () => {
     const metrics = affectedMetrics
@@ -64,13 +66,34 @@ export default function RCA() {
   const getGraphOption = () => {
     if (!graph || graph.nodes.length === 0) return null
 
+    const affectedList = affectedMetrics.split('\n').map((s) => s.trim()).filter(Boolean)
+
     const categories = [{ name: '指标' }]
-    const nodes = graph.nodes.map((name) => ({
-      id: name,
-      name: name.split('{')[0],
-      category: 0,
-      symbolSize: 30,
-    }))
+    const nodes = graph.nodes.map((name) => {
+      const isHighlighted = highlightNode === name
+      const isAffected = affectedList.some((m) => name.includes(m))
+      const isRootCause = results.some((r) => name.includes(r.metric_name))
+
+      let color = '#1677ff'
+      let size = 30
+      if (isRootCause) { color = '#ff4d4f'; size = 40 }
+      else if (isAffected) { color = '#faad14'; size = 35 }
+      if (isHighlighted) { size = 50 }
+
+      return {
+        id: name,
+        name: name.split('{')[0],
+        category: 0,
+        symbolSize: size,
+        itemStyle: {
+          color,
+          borderColor: isHighlighted ? '#000' : undefined,
+          borderWidth: isHighlighted ? 3 : 0,
+          shadowBlur: isHighlighted ? 20 : 0,
+          shadowColor: isHighlighted ? color : undefined,
+        },
+      }
+    })
 
     const links = graph.edges.map((e) => ({
       source: e.source,
@@ -112,6 +135,22 @@ export default function RCA() {
     }
   }
 
+  const handleHighlightRootCause = (metricName: string) => {
+    setHighlightNode(metricName)
+    // Trigger chart update via ref
+    if (chartRef.current) {
+      const instance = chartRef.current.getEchartsInstance()
+      if (instance) {
+        instance.dispatchAction({ type: 'downplay' })
+        // Find the node that matches this metric
+        const matchingNode = graph?.nodes.find((n) => n.includes(metricName))
+        if (matchingNode) {
+          instance.dispatchAction({ type: 'highlight', name: matchingNode.split('{')[0] })
+        }
+      }
+    }
+  }
+
   return (
     <div>
       {/* Input */}
@@ -147,7 +186,11 @@ export default function RCA() {
               <List
                 dataSource={results}
                 renderItem={(item: RootCause, index: number) => (
-                  <List.Item>
+                  <List.Item
+                    style={{ cursor: 'pointer', padding: '12px 8px', borderRadius: 6, transition: 'background 0.2s' }}
+                    className={highlightNode === item.metric_name ? 'rca-highlighted' : ''}
+                    onClick={() => handleHighlightRootCause(item.metric_name)}
+                  >
                     <div style={{ width: '100%' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                         <Space>
@@ -155,6 +198,9 @@ export default function RCA() {
                             #{index + 1}
                           </Tag>
                           <Text strong>{item.metric_name}</Text>
+                          <Tooltip title="在因果图中高亮">
+                            <AimOutlined style={{ color: '#1677ff', fontSize: 12 }} />
+                          </Tooltip>
                         </Space>
                         <Text type="secondary">{(item.score * 100).toFixed(0)}%</Text>
                       </div>
@@ -172,6 +218,14 @@ export default function RCA() {
                           ))}
                         </div>
                       )}
+                      {item.related_metrics.length > 0 && (
+                        <div style={{ marginTop: 4 }}>
+                          <Text type="secondary" style={{ fontSize: 11 }}>关联指标: </Text>
+                          {item.related_metrics.map((m, i) => (
+                            <Tag key={i} color="blue" style={{ fontSize: 11 }}>{m}</Tag>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </List.Item>
                 )}
@@ -181,9 +235,19 @@ export default function RCA() {
 
           {/* Causal graph */}
           <Col xs={24} lg={12}>
-            <Card title="因果关系图" size="small">
+            <Card
+              title="因果关系图"
+              size="small"
+              extra={
+                <Space size={4}>
+                  <Tag color="red">根因</Tag>
+                  <Tag color="orange">受影响</Tag>
+                  <Tag color="blue">其他</Tag>
+                </Space>
+              }
+            >
               {graph && graph.nodes.length > 0 ? (
-                <ReactECharts option={getGraphOption()} style={{ height: 350 }} />
+                <ReactECharts ref={chartRef} option={getGraphOption()} style={{ height: 350 }} />
               ) : (
                 <div style={{ height: 350, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999' }}>
                   暂无因果图数据，请先摄入指标数据
@@ -197,9 +261,14 @@ export default function RCA() {
       {/* Graph only view */}
       {results.length === 0 && graph && graph.nodes.length > 0 && (
         <Card title="因果关系图" size="small">
-          <ReactECharts option={getGraphOption()} style={{ height: 400 }} />
+          <ReactECharts ref={chartRef} option={getGraphOption()} style={{ height: 400 }} />
         </Card>
       )}
+
+      <style>{`
+        .rca-highlighted { background: #f0f5ff !important; }
+        .ant-list-item:hover { background: #fafafa; }
+      `}</style>
     </div>
   )
 }
