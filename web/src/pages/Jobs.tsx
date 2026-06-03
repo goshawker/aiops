@@ -234,7 +234,8 @@ export default function Jobs() {
           rowKey="id"
           loading={loading}
           size="small"
-          scroll={{ x: 1000 }}
+          virtual
+          scroll={{ x: 1000, y: 500 }}
           pagination={{ pageSize: 20, showTotal: (t) => `共 ${t} 个` }}
         />
       </Card>

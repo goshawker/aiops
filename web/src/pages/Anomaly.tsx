@@ -179,7 +179,9 @@ export default function Anomaly() {
           columns={columns}
           rowKey="id"
           size="small"
-          pagination={{ pageSize: 10, showTotal: (t) => `共 ${t} 条` }}
+          virtual
+          scroll={{ x: 1000, y: 500 }}
+          pagination={{ pageSize: 20, showTotal: (t) => `共 ${t} 条` }}
         />
       </Card>
 
