@@ -29,8 +29,7 @@ function ModelConfigPanel() {
         message.error('连接失败')
       }
     } catch {
-      updateConfig({ connected: true, lastTestTime: new Date().toLocaleString('zh-CN') })
-      message.success('连接成功（模拟）')
+      message.error('连接失败，请检查后端服务是否可用')
     } finally {
       setTesting(false)
     }

@@ -87,7 +87,9 @@ export default function Anomaly() {
     try {
       const res = await client.get('/anomaly/status')
       setModelStatus(res.data)
-    } catch (e) { /* Service may not be running */ }
+    } catch (e) {
+      // Anomaly service optional — no error shown
+    }
   }
 
   const handleDetect = async (values: any) => {

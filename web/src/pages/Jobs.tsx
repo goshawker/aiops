@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Card, Table, Tag, Button, Space, Typography, message, Modal, Form, Input, Select, InputNumber } from 'antd'
 import { PlusOutlined, PlayCircleOutlined, HistoryOutlined, DeleteOutlined, ClockCircleOutlined } from '@ant-design/icons'
 import client from '@/api/client'
@@ -37,9 +37,11 @@ export default function Jobs() {
   const [executions, setExecutions] = useState<JobExecution[]>([])
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [form] = Form.useForm()
+  const refreshTimer = useRef<ReturnType<typeof setTimeout>>()
 
   useEffect(() => {
     loadJobs()
+    return () => { if (refreshTimer.current) clearTimeout(refreshTimer.current) }
   }, [])
 
   const loadJobs = async () => {
@@ -48,7 +50,7 @@ export default function Jobs() {
       const res = await client.get('/jobs', { params: { limit: 100 } })
       setJobs(res.data?.data || [])
     } catch (e) {
-      // Service may not be available
+      message.error('加载作业列表失败')
     } finally {
       setLoading(false)
     }
@@ -70,7 +72,7 @@ export default function Jobs() {
     try {
       await client.post(`/jobs/${job.id}/run`)
       message.success(`作业 "${job.name}" 已开始执行`)
-      setTimeout(loadJobs, 1000)
+      refreshTimer.current = setTimeout(loadJobs, 1000)
     } catch (e) {
       message.error('执行失败')
     }

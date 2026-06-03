@@ -113,7 +113,7 @@ export default function Traces() {
       const res = await client.get('/traces', { params })
       setTraces(res.data?.data || [])
     } catch (e) {
-      // Service may not be available
+      message.error('加载链路列表失败')
     } finally {
       setLoading(false)
     }
@@ -124,7 +124,7 @@ export default function Traces() {
       const res = await client.get('/traces/services')
       setServices(res.data?.data || [])
     } catch (e) {
-      // Ignore
+      // Services list is optional, no error needed
     }
   }
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Card, Typography, Tag, Space, Spin, Descriptions, Drawer } from 'antd'
+import { Card, Typography, Tag, Space, Spin, Descriptions, Drawer, message } from 'antd'
 import { ClusterOutlined } from '@ant-design/icons'
 import ReactECharts from 'echarts-for-react'
 import client from '@/api/client'
@@ -56,7 +56,7 @@ export default function Topology() {
       const res = await client.get('/rca/graph')
       setGraph(res.data)
     } catch (e) {
-      // Service may not be running
+      message.error('加载拓扑数据失败')
     } finally {
       setLoading(false)
     }
