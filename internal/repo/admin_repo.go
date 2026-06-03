@@ -1,7 +1,10 @@
 package repo
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
+	"fmt"
 	"time"
 
 	"aiops/internal/model"
@@ -108,10 +111,24 @@ func (r *AdminRepo) DeleteUser(id int64) error {
 // --- Audit Logs ---
 
 func (r *AdminRepo) InsertAuditLog(log *model.AuditLog) error {
+	// Get the previous record's hash for chain integrity
+	var prevHash string
+	err := r.db.QueryRow("SELECT record_hash FROM audit_logs ORDER BY id DESC LIMIT 1").Scan(&prevHash)
+	if err != nil {
+		prevHash = "genesis" // First record
+	}
+
+	// Compute record hash: SHA-256(prev_hash + record_data)
+	now := time.Now()
+	recordData := fmt.Sprintf("%d:%s:%s:%s:%s:%s:%s:%s",
+		log.UserID, log.Username, log.Action, log.Resource,
+		log.ResourceID, log.Detail, log.IP, now.Format(time.RFC3339))
+	recordHash := sha256Hash(prevHash + recordData)
+
 	result, err := r.db.Exec(
-		`INSERT INTO audit_logs (user_id, username, action, resource, resource_id, detail, ip, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		log.UserID, log.Username, log.Action, log.Resource, log.ResourceID, log.Detail, log.IP, time.Now(),
+		`INSERT INTO audit_logs (user_id, username, action, resource, resource_id, detail, ip, prev_hash, record_hash, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		log.UserID, log.Username, log.Action, log.Resource, log.ResourceID, log.Detail, log.IP, prevHash, recordHash, now,
 	)
 	if err != nil {
 		return err
@@ -119,6 +136,11 @@ func (r *AdminRepo) InsertAuditLog(log *model.AuditLog) error {
 	id, _ := result.LastInsertId()
 	log.ID = id
 	return nil
+}
+
+func sha256Hash(s string) string {
+	h := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(h[:])
 }
 
 func (r *AdminRepo) ListAuditLogs(limit, offset int, userID int64, action string) ([]model.AuditLog, int, error) {

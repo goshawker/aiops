@@ -350,6 +350,7 @@ export default function MainLayout() {
     notificationCount,
     assistantVisible, setAssistantVisible,
     user,
+    resetActivity,
   } = useAppStore()
 
   // Derive current module from pathname
@@ -372,6 +373,17 @@ export default function MainLayout() {
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [searchVisible, setSearchVisible])
+
+  // Reset activity on page visibility change (tab switch back)
+  useEffect(() => {
+    const handler = () => {
+      if (document.visibilityState === 'visible') {
+        resetActivity()
+      }
+    }
+    document.addEventListener('visibilitychange', handler)
+    return () => document.removeEventListener('visibilitychange', handler)
+  }, [resetActivity])
 
   // ── Wrap page components to inject breadcrumb + title ───────
   const pageTitleMap: Record<string, string> = {

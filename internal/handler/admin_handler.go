@@ -465,6 +465,12 @@ func (h *AdminHandler) CreateUser(c *gin.Context) {
 		return
 	}
 
+	// Password complexity check
+	if err := validatePasswordComplexity(req.Password); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
 	user := &model.User{
 		Username:     req.Username,
 		PasswordHash: hashPassword(req.Password),
@@ -818,4 +824,51 @@ func (h *AdminHandler) validateToken(token string) (int64, int64, string, error)
 	}
 
 	return userID, tenantID, role, nil
+}
+
+// validatePasswordComplexity enforces password policy:
+// - Minimum 8 characters
+// - At least 3 of 4 character classes (uppercase, lowercase, digit, special)
+func validatePasswordComplexity(password string) error {
+	if len(password) < 8 {
+		return fmt.Errorf("密码长度不能少于 8 个字符")
+	}
+
+	hasUpper := false
+	hasLower := false
+	hasDigit := false
+	hasSpecial := false
+
+	for _, c := range password {
+		switch {
+		case c >= 'A' && c <= 'Z':
+			hasUpper = true
+		case c >= 'a' && c <= 'z':
+			hasLower = true
+		case c >= '0' && c <= '9':
+			hasDigit = true
+		default:
+			hasSpecial = true
+		}
+	}
+
+	classes := 0
+	if hasUpper {
+		classes++
+	}
+	if hasLower {
+		classes++
+	}
+	if hasDigit {
+		classes++
+	}
+	if hasSpecial {
+		classes++
+	}
+
+	if classes < 3 {
+		return fmt.Errorf("密码必须包含以下 3 种以上字符: 大写字母、小写字母、数字、特殊字符")
+	}
+
+	return nil
 }
