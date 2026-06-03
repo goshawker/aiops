@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
-import { Card, Input, Select, Table, Tag, Space, Typography, message, Tooltip } from 'antd'
-import { SearchOutlined } from '@ant-design/icons'
+import { Card, Input, Select, Table, Tag, Space, Typography, message, Tooltip, Button } from 'antd'
+import { SearchOutlined, LinkOutlined } from '@ant-design/icons'
+import { useNavigate } from 'react-router-dom'
 import { logsApi } from '@/api'
 import type { LogEntry } from '@/api/logs'
+import LogMessage from '@/components/LogMessage'
 
-const { Text, Paragraph } = Typography
+const { Text } = Typography
 
 const levelColors: Record<string, string> = {
   FATAL: 'red',
@@ -15,7 +17,6 @@ const levelColors: Record<string, string> = {
   DEBUG: 'default',
 }
 
-// Common services for quick filter
 const commonServices = [
   { label: 'gateway', value: 'gateway' },
   { label: 'query', value: 'query' },
@@ -27,6 +28,7 @@ const commonServices = [
 ]
 
 export default function Logs() {
+  const navigate = useNavigate()
   const [query, setQuery] = useState('')
   const [level, setLevel] = useState<string>('')
   const [service, setService] = useState<string>('')
@@ -65,7 +67,11 @@ export default function Logs() {
       dataIndex: 'timestamp',
       key: 'timestamp',
       width: 180,
-      render: (t: string) => new Date(t).toLocaleString('zh-CN'),
+      render: (t: string) => (
+        <Text code style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+          {new Date(t).toLocaleString('zh-CN')}
+        </Text>
+      ),
     },
     {
       title: '级别',
@@ -93,16 +99,26 @@ export default function Logs() {
       dataIndex: 'message',
       key: 'message',
       ellipsis: true,
+      render: (msg: string, record: LogEntry) => (
+        <LogMessage message={msg} level={record.level} highlight={query || undefined} />
+      ),
     },
     {
       title: 'TraceID',
       dataIndex: 'trace_id',
       key: 'trace_id',
-      width: 160,
+      width: 180,
       render: (t: string) =>
         t ? (
           <Tooltip title={t}>
-            <Tag>{t.substring(0, 16)}...</Tag>
+            <Tag
+              color="blue"
+              style={{ cursor: 'pointer' }}
+              onClick={() => navigate(`/traces?trace_id=${t}`)}
+            >
+              <LinkOutlined style={{ marginRight: 4 }} />
+              {t.substring(0, 16)}...
+            </Tag>
           </Tooltip>
         ) : (
           '-'
@@ -157,12 +173,9 @@ export default function Logs() {
               { label: '200 条', value: 200 },
             ]}
           />
-          <Space>
-            <SearchOutlined
-              style={{ cursor: 'pointer', fontSize: 16, color: '#1677ff' }}
-              onClick={() => handleSearch()}
-            />
-          </Space>
+          <Button type="primary" icon={<SearchOutlined />} onClick={() => handleSearch()}>
+            搜索
+          </Button>
         </Space>
       </Card>
 
@@ -174,7 +187,8 @@ export default function Logs() {
           rowKey={(r) => `${r.timestamp}-${r.host}-${r.message?.substring(0, 20)}`}
           loading={loading}
           size="small"
-          scroll={{ x: 900 }}
+          virtual
+          scroll={{ x: 1100, y: 600 }}
           pagination={{
             total,
             current: Math.floor(page.offset / page.limit) + 1,
@@ -186,28 +200,25 @@ export default function Logs() {
           expandable={{
             expandedRowRender: (record) => (
               <div style={{ padding: '8px 0' }}>
-                <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                <Space direction="vertical" size={8} style={{ width: '100%' }}>
                   <div>
                     <Text strong>完整日志：</Text>
-                    <Paragraph
-                      style={{
-                        marginTop: 4,
-                        padding: 8,
-                        background: '#f5f5f5',
-                        borderRadius: 4,
-                        fontFamily: 'monospace',
-                        fontSize: 12,
-                        whiteSpace: 'pre-wrap',
-                        wordBreak: 'break-all',
-                      }}
-                    >
-                      {record.message}
-                    </Paragraph>
+                    <div style={{ marginTop: 4 }}>
+                      <LogMessage message={record.message} level={record.level} />
+                    </div>
                   </div>
                   <Space wrap size={[16, 4]}>
                     <Text type="secondary">服务: {record.service || '-'}</Text>
                     <Text type="secondary">主机: {record.host || '-'}</Text>
-                    {record.trace_id && <Text type="secondary">TraceID: {record.trace_id}</Text>}
+                    {record.trace_id && (
+                      <Text
+                        type="secondary"
+                        style={{ cursor: 'pointer', color: '#1677ff' }}
+                        onClick={() => navigate(`/traces?trace_id=${record.trace_id}`)}
+                      >
+                        TraceID: {record.trace_id}
+                      </Text>
+                    )}
                     {record.span_id && <Text type="secondary">SpanID: {record.span_id}</Text>}
                   </Space>
                 </Space>
