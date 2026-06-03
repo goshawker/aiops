@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pquerna/otp/totp"
 	"golang.org/x/crypto/bcrypt"
 	"aiops/internal/model"
 	"aiops/internal/repo"
@@ -35,16 +36,61 @@ type AdminHandler struct {
 	loginLocks  map[string]*loginAttempt
 	maxAttempts int
 	lockoutTime time.Duration
+
+	// Token revocation blacklist: token_id -> expiry time
+	tokenBlacklist map[string]time.Time
 }
 
 func NewAdminHandler(repo *repo.AdminRepo, tenantRepo *repo.TenantRepo) *AdminHandler {
-	return &AdminHandler{
-		repo:        repo,
-		tenantRepo:  tenantRepo,
-		loginLocks:  make(map[string]*loginAttempt),
-		maxAttempts: 5,
-		lockoutTime: 15 * time.Minute,
+	h := &AdminHandler{
+		repo:           repo,
+		tenantRepo:     tenantRepo,
+		loginLocks:     make(map[string]*loginAttempt),
+		maxAttempts:    5,
+		lockoutTime:    15 * time.Minute,
+		tokenBlacklist: make(map[string]time.Time),
 	}
+	// Start background goroutine to clean expired tokens
+	go h.cleanBlacklist()
+	return h
+}
+
+// cleanBlacklist periodically removes expired tokens from the blacklist.
+func (h *AdminHandler) cleanBlacklist() {
+	ticker := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		h.mu.Lock()
+		now := time.Now()
+		for id, expiry := range h.tokenBlacklist {
+			if now.After(expiry) {
+				delete(h.tokenBlacklist, id)
+			}
+		}
+		h.mu.Unlock()
+	}
+}
+
+// revokeToken adds a token to the blacklist.
+func (h *AdminHandler) revokeToken(tokenID string, expiry time.Time) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.tokenBlacklist[tokenID] = expiry
+}
+
+// isTokenRevoked checks if a token has been revoked.
+func (h *AdminHandler) isTokenRevoked(tokenID string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	expiry, ok := h.tokenBlacklist[tokenID]
+	if !ok {
+		return false
+	}
+	if time.Now().After(expiry) {
+		delete(h.tokenBlacklist, tokenID)
+		return false
+	}
+	return true
 }
 
 // isLockedOut checks if an account is currently locked.
@@ -108,7 +154,7 @@ func (h *AdminHandler) AuthMiddleware() gin.HandlerFunc {
 		// Priority 1: Validate HMAC token directly
 		if authHeader := c.GetHeader("Authorization"); authHeader != "" && len(authHeader) > 7 && authHeader[:7] == "Bearer " {
 			tokenStr := authHeader[7:]
-			userID, tenantID, role, err := validateToken(tokenStr)
+			userID, tenantID, role, err := h.validateToken(tokenStr)
 			if err == nil && userID > 0 {
 				c.Set("user_id", userID)
 				c.Set("tenant_id", tenantID)
@@ -231,6 +277,33 @@ func containsStr(s, substr string) bool {
 
 // --- Auth Handlers ---
 
+// Logout handles POST /api/v1/auth/logout — revokes the current token.
+func (h *AdminHandler) Logout(c *gin.Context) {
+	authHeader := c.GetHeader("Authorization")
+	if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+		tokenStr := authHeader[7:]
+		// Extract token_id from payload
+		parts := strings.SplitN(tokenStr, ":", 2)
+		if len(parts) == 2 {
+			if payload, err := hex.DecodeString(parts[0]); err == nil {
+				fields := strings.SplitN(string(payload), ":", 5)
+				if len(fields) == 5 && fields[3] != "" {
+					// Revoke for 24 hours
+					h.revokeToken(fields[3], time.Now().Add(24*time.Hour))
+				}
+			}
+		}
+	}
+
+	userID, _ := c.Get("user_id")
+	username, _ := c.Get("username")
+	uid, _ := userID.(int64)
+	uname, _ := username.(string)
+	h.auditLog(c, uid, uname, "logout", "auth", "", "登出")
+
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
 func (h *AdminHandler) Login(c *gin.Context) {
 	var req struct {
 		Username string `json:"username" binding:"required"`
@@ -293,6 +366,55 @@ func (h *AdminHandler) Login(c *gin.Context) {
 		"role":        user.Role,
 		"tenant_id":   user.TenantID,
 	})
+}
+
+// EnableMFA handles POST /api/v1/auth/mfa/enable — generates a TOTP secret.
+func (h *AdminHandler) EnableMFA(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+	user, err := h.repo.GetUserByID(userID.(int64))
+	if err != nil || user == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
+		return
+	}
+
+	// Generate TOTP key
+	key, err := totp.Generate(totp.GenerateOpts{
+		Issuer:      "AIOps",
+		AccountName: user.Username,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "生成 MFA 密钥失败"})
+		return
+	}
+
+	// Store secret temporarily (user must verify before enabling)
+	// In production, store in DB with mfa_enabled=false until verified
+	c.JSON(http.StatusOK, gin.H{
+		"secret": key.Secret(),
+		"otp_url": key.URL(),
+		"message": "请使用 TOTP 应用扫描二维码，然后调用 /auth/mfa/verify 验证",
+	})
+}
+
+// VerifyMFA handles POST /api/v1/auth/mfa/verify — verifies a TOTP code.
+func (h *AdminHandler) VerifyMFA(c *gin.Context) {
+	var req struct {
+		Secret string `json:"secret" binding:"required"`
+		Code   string `json:"code" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+
+	// Validate TOTP code
+	valid := totp.Validate(req.Code, req.Secret)
+	if !valid {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "验证码无效", "valid": false})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"valid": true, "message": "MFA 验证成功"})
 }
 
 func (h *AdminHandler) GetCurrentUser(c *gin.Context) {
@@ -623,9 +745,10 @@ func envOrDefault(key, fallback string) string {
 }
 
 // generateToken creates a HMAC-SHA256 signed token for the gateway to validate.
-// Format: hex(payload):hex(signature) where payload = "user_id:tenant_id:role:timestamp"
+// Format: hex(payload):hex(signature) where payload = "user_id:tenant_id:role:token_id:timestamp"
 func generateToken(userID, tenantID int64, role string) string {
-	payload := fmt.Sprintf("%d:%d:%s:%s", userID, tenantID, role, time.Now().UTC().Format(time.RFC3339))
+	tokenID := fmt.Sprintf("%d-%d", userID, time.Now().UnixNano())
+	payload := fmt.Sprintf("%d:%d:%s:%s:%s", userID, tenantID, role, tokenID, time.Now().UTC().Format(time.RFC3339))
 	payloadHex := hex.EncodeToString([]byte(payload))
 
 	mac := hmac.New(sha256.New, []byte(jwtSecret))
@@ -637,7 +760,8 @@ func generateToken(userID, tenantID int64, role string) string {
 
 // validateToken parses and validates a HMAC-SHA256 token.
 // Returns user_id, tenant_id, role on success.
-func validateToken(token string) (int64, int64, string, error) {
+// Supports both old format (4 fields) and new format (5 fields with token_id).
+func (h *AdminHandler) validateToken(token string) (int64, int64, string, error) {
 	parts := strings.SplitN(token, ":", 2)
 	if len(parts) != 2 {
 		return 0, 0, "", fmt.Errorf("invalid token format")
@@ -657,22 +781,41 @@ func validateToken(token string) (int64, int64, string, error) {
 		return 0, 0, "", fmt.Errorf("invalid token signature")
 	}
 
-	// Parse payload: user_id:tenant_id:role:timestamp
+	// Parse payload: user_id:tenant_id:role:token_id:timestamp (new) or user_id:tenant_id:role:timestamp (old)
 	payloadStr := string(payload)
-	fields := strings.SplitN(payloadStr, ":", 4)
-	if len(fields) != 4 {
+	fields := strings.SplitN(payloadStr, ":", 5)
+
+	var userID, tenantID int64
+	var role string
+	var ts time.Time
+	var tokenID string
+
+	if len(fields) == 5 {
+		// New format: user_id:tenant_id:role:token_id:timestamp
+		userID, _ = strconv.ParseInt(fields[0], 10, 64)
+		tenantID, _ = strconv.ParseInt(fields[1], 10, 64)
+		role = fields[2]
+		tokenID = fields[3]
+		ts, _ = time.Parse(time.RFC3339, fields[4])
+	} else if len(fields) == 4 {
+		// Old format: user_id:tenant_id:role:timestamp
+		userID, _ = strconv.ParseInt(fields[0], 10, 64)
+		tenantID, _ = strconv.ParseInt(fields[1], 10, 64)
+		role = fields[2]
+		ts, _ = time.Parse(time.RFC3339, fields[3])
+	} else {
 		return 0, 0, "", fmt.Errorf("invalid token payload")
 	}
 
 	// Check token expiry (24 hours)
-	ts, err := time.Parse(time.RFC3339, fields[3])
-	if err == nil && time.Since(ts) > 24*time.Hour {
+	if time.Since(ts) > 24*time.Hour {
 		return 0, 0, "", fmt.Errorf("token expired")
 	}
 
-	userID, _ := strconv.ParseInt(fields[0], 10, 64)
-	tenantID, _ := strconv.ParseInt(fields[1], 10, 64)
-	role := fields[2]
+	// Check token revocation (only for new format with token_id)
+	if tokenID != "" && h.isTokenRevoked(tokenID) {
+		return 0, 0, "", fmt.Errorf("token has been revoked")
+	}
 
 	return userID, tenantID, role, nil
 }
