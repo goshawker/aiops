@@ -2,8 +2,11 @@ package handler
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os/exec"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -210,6 +213,18 @@ func (h *JobHandler) executeJob(job *model.Job, exec *model.JobExecution) {
 
 	switch job.JobType {
 	case "shell":
+		// Validate command against dangerous patterns
+		if err := validateShellCommand(job.Content); err != nil {
+			exec.Status = "failed"
+			exec.Output = ""
+			exec.Error = err.Error()
+			exec.Duration = 0
+			now := time.Now()
+			exec.EndedAt = &now
+			h.repo.UpdateExecution(exec)
+			h.repo.UpdateJobStatus(job.ID, "failed")
+			return
+		}
 		cmd := execCommand(ctx, "sh", "-c", job.Content)
 		out, err := cmd.CombinedOutput()
 		output = string(out)
@@ -219,7 +234,18 @@ func (h *JobHandler) executeJob(job *model.Job, exec *model.JobExecution) {
 		}
 
 	case "http":
-		// HTTP health check
+		// Validate URL
+		if err := validateHTTPURL(job.Content); err != nil {
+			exec.Status = "failed"
+			exec.Output = ""
+			exec.Error = err.Error()
+			exec.Duration = 0
+			now := time.Now()
+			exec.EndedAt = &now
+			h.repo.UpdateExecution(exec)
+			h.repo.UpdateJobStatus(job.ID, "failed")
+			return
+		}
 		httpCmd := execCommand(ctx, "curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", "30", job.Content)
 		out, err := httpCmd.CombinedOutput()
 		output = string(out)
@@ -248,4 +274,60 @@ func (h *JobHandler) executeJob(job *model.Job, exec *model.JobExecution) {
 
 func execCommand(ctx context.Context, name string, args ...string) *exec.Cmd {
 	return exec.CommandContext(ctx, name, args...)
+}
+
+// dangerousPatterns contains shell commands/patterns that are blocked.
+var dangerousPatterns = []string{
+	"rm -rf /",
+	"rm -rf /*",
+	"mkfs",
+	"dd if=",
+	"> /dev/sd",
+	"chmod 777 /",
+	"chown root",
+	":(){ :|:& };:",  // fork bomb
+	"wget | sh",
+	"curl | sh",
+	"curl | bash",
+	"nc -e",
+	"ncat -e",
+	"/etc/shadow",
+	"/etc/passwd",
+}
+
+// urlPattern validates HTTP/HTTPS URLs.
+var urlPattern = regexp.MustCompile(`^https?://[a-zA-Z0-9\-._~:/?#\[\]@!$&'()*+,;=%]+$`)
+
+// validateShellCommand checks for dangerous shell command patterns.
+func validateShellCommand(content string) error {
+	contentLower := strings.ToLower(strings.TrimSpace(content))
+
+	if contentLower == "" {
+		return fmt.Errorf("命令内容不能为空")
+	}
+
+	for _, pattern := range dangerousPatterns {
+		if strings.Contains(contentLower, strings.ToLower(pattern)) {
+			return fmt.Errorf("命令包含危险模式: %s", pattern)
+		}
+	}
+
+	// Block commands that try to write to system directories
+	if strings.Contains(contentLower, "> /etc/") || strings.Contains(contentLower, "> /usr/") || strings.Contains(contentLower, "> /var/") {
+		return fmt.Errorf("命令尝试写入系统目录")
+	}
+
+	return nil
+}
+
+// validateHTTPURL checks if the URL is a valid HTTP/HTTPS URL.
+func validateHTTPURL(content string) error {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return fmt.Errorf("URL 不能为空")
+	}
+	if !urlPattern.MatchString(content) {
+		return fmt.Errorf("无效的 HTTP/HTTPS URL")
+	}
+	return nil
 }

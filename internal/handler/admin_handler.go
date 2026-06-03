@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -94,45 +95,73 @@ func (h *AdminHandler) clearLoginAttempts(username string) {
 // --- Auth Middleware ---
 
 // AuthMiddleware validates the session and injects user info.
+// Priority 1: Validate HMAC token from Authorization header (direct client access)
+// Priority 2: Trust X-User-ID header only from internal Gateway calls (X-Forwarded-For present)
 func (h *AdminHandler) AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Simple token-based auth (Phase 1: header-based)
-		userIDStr := c.GetHeader("X-User-ID")
-		if userIDStr == "" {
-			// Allow unauthenticated access for login endpoint
-			if c.Request.URL.Path == "/api/v1/auth/login" {
+		// Allow unauthenticated access for login endpoint
+		if c.Request.URL.Path == "/api/v1/auth/login" {
+			c.Next()
+			return
+		}
+
+		// Priority 1: Validate HMAC token directly
+		if authHeader := c.GetHeader("Authorization"); authHeader != "" && len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+			tokenStr := authHeader[7:]
+			userID, tenantID, role, err := validateToken(tokenStr)
+			if err == nil && userID > 0 {
+				c.Set("user_id", userID)
+				c.Set("tenant_id", tenantID)
+				c.Set("role", role)
 				c.Next()
 				return
 			}
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "token 无效或已过期"})
 			c.Abort()
 			return
 		}
 
-		userID, err := strconv.ParseInt(userIDStr, 10, 64)
-		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "无效用户"})
-			c.Abort()
+		// Priority 2: Trust X-User-ID only from internal Gateway (X-Forwarded-For present)
+		// This is the path for requests that came through the Gateway proxy
+		if c.GetHeader("X-Forwarded-For") != "" || c.GetHeader("X-Real-IP") != "" {
+			userIDStr := c.GetHeader("X-User-ID")
+			if userIDStr == "" {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+				c.Abort()
+				return
+			}
+
+			userID, err := strconv.ParseInt(userIDStr, 10, 64)
+			if err != nil {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "无效用户"})
+				c.Abort()
+				return
+			}
+
+			user, err := h.repo.GetUserByID(userID)
+			if err != nil || user == nil {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "用户不存在"})
+				c.Abort()
+				return
+			}
+
+			if user.Status != "active" {
+				c.JSON(http.StatusForbidden, gin.H{"error": "账号已禁用"})
+				c.Abort()
+				return
+			}
+
+			c.Set("user_id", user.ID)
+			c.Set("username", user.Username)
+			c.Set("tenant_id", user.TenantID)
+			c.Set("role", user.Role)
+			c.Next()
 			return
 		}
 
-		user, err := h.repo.GetUserByID(userID)
-		if err != nil || user == nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "用户不存在"})
-			c.Abort()
-			return
-		}
-
-		if user.Status != "active" {
-			c.JSON(http.StatusForbidden, gin.H{"error": "账号已禁用"})
-			c.Abort()
-			return
-		}
-
-		c.Set("user_id", user.ID)
-		c.Set("username", user.Username)
-		c.Set("role", user.Role)
-		c.Next()
+		// No valid auth source found
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+		c.Abort()
 	}
 }
 
@@ -604,4 +633,46 @@ func generateToken(userID, tenantID int64, role string) string {
 	signature := hex.EncodeToString(mac.Sum(nil))
 
 	return payloadHex + ":" + signature
+}
+
+// validateToken parses and validates a HMAC-SHA256 token.
+// Returns user_id, tenant_id, role on success.
+func validateToken(token string) (int64, int64, string, error) {
+	parts := strings.SplitN(token, ":", 2)
+	if len(parts) != 2 {
+		return 0, 0, "", fmt.Errorf("invalid token format")
+	}
+
+	payload, err := hex.DecodeString(parts[0])
+	if err != nil {
+		return 0, 0, "", fmt.Errorf("invalid token encoding")
+	}
+	signature := parts[1]
+
+	// Verify signature
+	mac := hmac.New(sha256.New, []byte(jwtSecret))
+	mac.Write(payload)
+	expectedSig := hex.EncodeToString(mac.Sum(nil))
+	if !hmac.Equal([]byte(signature), []byte(expectedSig)) {
+		return 0, 0, "", fmt.Errorf("invalid token signature")
+	}
+
+	// Parse payload: user_id:tenant_id:role:timestamp
+	payloadStr := string(payload)
+	fields := strings.SplitN(payloadStr, ":", 4)
+	if len(fields) != 4 {
+		return 0, 0, "", fmt.Errorf("invalid token payload")
+	}
+
+	// Check token expiry (24 hours)
+	ts, err := time.Parse(time.RFC3339, fields[3])
+	if err == nil && time.Since(ts) > 24*time.Hour {
+		return 0, 0, "", fmt.Errorf("token expired")
+	}
+
+	userID, _ := strconv.ParseInt(fields[0], 10, 64)
+	tenantID, _ := strconv.ParseInt(fields[1], 10, 64)
+	role := fields[2]
+
+	return userID, tenantID, role, nil
 }
