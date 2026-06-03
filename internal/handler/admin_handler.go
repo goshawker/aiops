@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/crypto/bcrypt"
 	"aiops/internal/model"
 	"aiops/internal/repo"
 )
@@ -103,8 +104,7 @@ func (h *AdminHandler) Login(c *gin.Context) {
 	}
 
 	// Check password hash
-	hash := sha256Hash(req.Password)
-	if hash != user.PasswordHash {
+	if !verifyPassword(req.Password, user.PasswordHash) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
 		return
 	}
@@ -184,7 +184,7 @@ func (h *AdminHandler) CreateUser(c *gin.Context) {
 
 	user := &model.User{
 		Username:     req.Username,
-		PasswordHash: sha256Hash(req.Password),
+		PasswordHash: hashPassword(req.Password),
 		DisplayName:  req.DisplayName,
 		Email:        req.Email,
 		Role:         req.Role,
@@ -308,9 +308,24 @@ func (h *AdminHandler) auditLog(c *gin.Context, userID int64, username, action, 
 	})
 }
 
-func sha256Hash(s string) string {
-	h := sha256.Sum256([]byte(s))
-	return hex.EncodeToString(h[:])
+func hashPassword(s string) string {
+	hash, err := bcrypt.GenerateFromPassword([]byte(s), 12)
+	if err != nil {
+		// Fallback to SHA-256 only if bcrypt fails (should not happen)
+		h := sha256.Sum256([]byte(s))
+		return hex.EncodeToString(h[:])
+	}
+	return string(hash)
+}
+
+func verifyPassword(password, hash string) bool {
+	// Try bcrypt first
+	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)); err == nil {
+		return true
+	}
+	// Fallback: check if it's a legacy SHA-256 hash
+	h := sha256.Sum256([]byte(password))
+	return hex.EncodeToString(h[:]) == hash
 }
 
 // --- Tenant Management ---
@@ -428,7 +443,16 @@ func (h *AdminHandler) DeleteTenant(c *gin.Context) {
 }
 
 // jwtSecret must match the gateway's JWT_SECRET env var.
-var jwtSecret = envOrDefault("JWT_SECRET", "aiops-dev-secret-key")
+var jwtSecret = func() string {
+	s := os.Getenv("JWT_SECRET")
+	if s == "" {
+		panic("FATAL: JWT_SECRET environment variable is required (minimum 32 bytes)")
+	}
+	if len(s) < 32 {
+		panic("FATAL: JWT_SECRET must be at least 32 bytes")
+	}
+	return s
+}()
 
 func envOrDefault(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {

@@ -132,6 +132,7 @@ services:
       SERVICE_NAME: gateway
       PORT: "8080"
       GIN_MODE: release
+      JWT_SECRET: "${JWT_SECRET:?JWT_SECRET environment variable is required}"
       UPSTREAM_QUERY: "http://aiops-query:8081"
       UPSTREAM_ALERT: "http://aiops-alert:8082"
       UPSTREAM_ADMIN: "http://aiops-admin:8083"
@@ -194,6 +195,7 @@ services:
       SERVICE_NAME: admin
       PORT: "8083"
       GIN_MODE: release
+      JWT_SECRET: "${JWT_SECRET:?JWT_SECRET environment variable is required}"
     restart: unless-stopped
 
   collector-service:

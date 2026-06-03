@@ -44,8 +44,17 @@ var upstreams = map[string]string{
 }
 
 // jwtSecret is used for HMAC-SHA256 token validation.
-// In production, set JWT_SECRET env var; default is for dev only.
-var jwtSecret = envOr("JWT_SECRET", "aiops-dev-secret-key")
+// JWT_SECRET env var is required (minimum 32 bytes).
+var jwtSecret = func() string {
+	s := os.Getenv("JWT_SECRET")
+	if s == "" {
+		log.Fatal("FATAL: JWT_SECRET environment variable is required (minimum 32 bytes)")
+	}
+	if len(s) < 32 {
+		log.Fatal("FATAL: JWT_SECRET must be at least 32 bytes")
+	}
+	return s
+}()
 
 // noAuthPaths are paths that don't require authentication.
 var noAuthPaths = map[string]bool{

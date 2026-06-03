@@ -22,16 +22,8 @@ export default function Login() {
       message.success('登录成功')
       navigate('/dashboard')
     } catch (e: unknown) {
-      // Demo mode - auto login when backend unavailable
       const err = e as { status?: number; error?: string; message?: string }
-      const isNetworkError = !err?.status && !err?.error
-      if (isNetworkError) {
-        message.warning('后端不可用，已进入演示模式')
-        setAuth('demo-token', { username: values.username, role: 'admin' })
-        navigate('/dashboard')
-      } else {
-        message.error(err?.error || err?.message || '登录失败，请检查用户名和密码')
-      }
+      message.error(err?.error || err?.message || '登录失败，请检查用户名和密码')
     } finally {
       setLoading(false)
     }
@@ -111,12 +103,6 @@ export default function Login() {
             </Button>
           </Form.Item>
         </Form>
-
-        <div style={{ textAlign: 'center' }}>
-          <Text type="secondary" style={{ fontSize: 13 }}>
-            演示账号: admin / admin123
-          </Text>
-        </div>
 
         {/* Footer info */}
         <div style={{ textAlign: 'center', marginTop: 32 }}>
