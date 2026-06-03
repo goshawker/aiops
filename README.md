@@ -5,7 +5,7 @@
 [![Go](https://img.shields.io/badge/Go-1.22-00ADD8?logo=go)](https://go.dev/)
 [![React](https://img.shields.io/badge/React-18-61DAFB?logo=react)](https://react.dev/)
 [![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python)](https://www.python.org/)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-GPL--3.0%20with%20Commercial%20Exception-blue.svg)](LICENSE)
 
 ---
 
@@ -182,4 +182,7 @@ cd ai && python -m pytest . -v  # AI
 
 ## 许可证
 
-本项目采用 [MIT License](LICENSE) 开源协议。
+本项目采用 **GPL-3.0 + 商业豁免条款** 双重许可。详见 [LICENSE](LICENSE)。
+
+- 开源使用：遵循 GPL-3.0 条款
+- 商业使用：年收入低于 100 万美元的组织可免费商用；超出范围需获取商业许可
