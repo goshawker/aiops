@@ -5,17 +5,49 @@ import (
 	"strconv"
 
 	"aiops/internal/model"
+	"aiops/internal/repo"
 	"aiops/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
 
 type AlertHandler struct {
-	svc *service.AlertService
+	svc     *service.AlertService
+	auditDB *repo.AdminRepo // for audit logging
+}
+
+// auditLog writes an audit trail entry.
+func (h *AlertHandler) auditLog(c *gin.Context, action, resource, resourceID, detail string) {
+	if h.auditDB == nil {
+		return
+	}
+	userID, _ := c.Get("user_id")
+	username, _ := c.Get("username")
+	uid, _ := userID.(int64)
+	uname, _ := username.(string)
+	h.auditDB.InsertAuditLog(&model.AuditLog{
+		UserID:     uid,
+		Username:   uname,
+		Action:     action,
+		Resource:   resource,
+		ResourceID: resourceID,
+		Detail:     detail,
+		IP:         c.ClientIP(),
+	})
 }
 
 func NewAlertHandler(svc *service.AlertService) *AlertHandler {
 	return &AlertHandler{svc: svc}
+}
+
+// getTenantID extracts tenant_id from gin context (set by auth middleware).
+func getTenantID(c *gin.Context) int64 {
+	if v, ok := c.Get("tenant_id"); ok {
+		if id, ok := v.(int64); ok {
+			return id
+		}
+	}
+	return 1 // fallback for backward compatibility
 }
 
 // ListEvents handles GET /api/v1/alerts/events
@@ -24,7 +56,7 @@ func (h *AlertHandler) ListEvents(c *gin.Context) {
 	limit := parseIntDefault(c.Query("limit"), 50)
 	offset := parseIntDefault(c.Query("offset"), 0)
 
-	events, total, err := h.svc.ListEvents(1, status, limit, offset)
+	events, total, err := h.svc.ListEvents(getTenantID(c), status, limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -44,7 +76,7 @@ func (h *AlertHandler) ListIncidents(c *gin.Context) {
 	limit := parseIntDefault(c.Query("limit"), 50)
 	offset := parseIntDefault(c.Query("offset"), 0)
 
-	incidents, total, err := h.svc.ListIncidents(1, status, limit, offset)
+	incidents, total, err := h.svc.ListIncidents(getTenantID(c), status, limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -97,7 +129,7 @@ func (h *AlertHandler) ListRules(c *gin.Context) {
 	limit := parseIntDefault(c.Query("limit"), 50)
 	offset := parseIntDefault(c.Query("offset"), 0)
 
-	rules, total, err := h.svc.ListRules(1, limit, offset)
+	rules, total, err := h.svc.ListRules(getTenantID(c), limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -140,7 +172,7 @@ func (h *AlertHandler) CreateRule(c *gin.Context) {
 	}
 
 	rule := &model.AlertRule{
-		TenantID:      1,
+		TenantID:      getTenantID(c),
 		Name:          req.Name,
 		Description:   req.Description,
 		RuleType:      req.RuleType,
@@ -156,6 +188,7 @@ func (h *AlertHandler) CreateRule(c *gin.Context) {
 		return
 	}
 
+	h.auditLog(c, "create", "alert_rule", strconv.FormatInt(rule.ID, 10), "创建告警规则: "+rule.Name)
 	c.JSON(http.StatusCreated, rule)
 }
 
@@ -227,6 +260,7 @@ func (h *AlertHandler) UpdateRule(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	h.auditLog(c, "update", "alert_rule", strconv.FormatInt(id, 10), "更新告警规则: "+rule.Name)
 	c.JSON(http.StatusOK, rule)
 }
 
@@ -237,6 +271,7 @@ func (h *AlertHandler) DeleteRule(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	h.auditLog(c, "delete", "alert_rule", strconv.FormatInt(id, 10), "删除告警规则")
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 

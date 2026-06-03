@@ -1,15 +1,18 @@
 FROM python:3.12-slim
 
+RUN groupadd -g 1000 appgroup && useradd -u 1000 -g appgroup -s /bin/bash appuser
+
 WORKDIR /app
 COPY ai/requirements.txt .
 RUN pip install --no-cache-dir torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY ai/ ./ai/
+COPY --chown=appuser:appgroup ai/ ./ai/
 
 ARG SERVICE_NAME
 ENV SERVICE_NAME=${SERVICE_NAME}
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 
+USER appuser
 CMD ["sh", "-c", "python ai/${SERVICE_NAME}/server.py"]

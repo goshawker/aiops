@@ -58,13 +58,11 @@ var jwtSecret = func() string {
 
 // noAuthPaths are paths that don't require authentication.
 var noAuthPaths = map[string]bool{
-	"/health":                          true,
-	"/version":                         true,
-	"/api/v1/auth/login":               true,
-	"/api/v1/agent/install.sh":         true,
-	"/api/v1/agent/download":           true,
-	"/api/v1/collectors/scrape-targets": true,
-	"/api/v1/collectors":               true,
+	"/health":              true,
+	"/version":             true,
+	"/api/v1/auth/login":   true,
+	"/api/v1/agent/install.sh": true,
+	"/api/v1/agent/download":   true,
 }
 
 func envOr(key, fallback string) string {
