@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -16,14 +17,78 @@ import (
 	"aiops/internal/repo"
 )
 
+// loginAttempt tracks failed login attempts for account lockout.
+type loginAttempt struct {
+	count    int
+	lastFail time.Time
+	locked   bool
+}
+
 // AdminHandler handles user management, tenant management, and audit logs.
 type AdminHandler struct {
 	repo       *repo.AdminRepo
 	tenantRepo *repo.TenantRepo
+
+	// Login lockout
+	mu          sync.Mutex
+	loginLocks  map[string]*loginAttempt
+	maxAttempts int
+	lockoutTime time.Duration
 }
 
 func NewAdminHandler(repo *repo.AdminRepo, tenantRepo *repo.TenantRepo) *AdminHandler {
-	return &AdminHandler{repo: repo, tenantRepo: tenantRepo}
+	return &AdminHandler{
+		repo:        repo,
+		tenantRepo:  tenantRepo,
+		loginLocks:  make(map[string]*loginAttempt),
+		maxAttempts: 5,
+		lockoutTime: 15 * time.Minute,
+	}
+}
+
+// isLockedOut checks if an account is currently locked.
+func (h *AdminHandler) isLockedOut(username string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	attempt, ok := h.loginLocks[username]
+	if !ok {
+		return false
+	}
+
+	// Auto-unlock after lockout period
+	if attempt.locked && time.Since(attempt.lastFail) > h.lockoutTime {
+		delete(h.loginLocks, username)
+		return false
+	}
+
+	return attempt.locked
+}
+
+// recordFailedLogin increments the failed attempt counter.
+func (h *AdminHandler) recordFailedLogin(username string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	attempt, ok := h.loginLocks[username]
+	if !ok {
+		attempt = &loginAttempt{}
+		h.loginLocks[username] = attempt
+	}
+
+	attempt.count++
+	attempt.lastFail = time.Now()
+
+	if attempt.count >= h.maxAttempts {
+		attempt.locked = true
+	}
+}
+
+// clearLoginAttempts resets the failed attempt counter on successful login.
+func (h *AdminHandler) clearLoginAttempts(username string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	delete(h.loginLocks, username)
 }
 
 // --- Auth Middleware ---
@@ -72,17 +137,67 @@ func (h *AdminHandler) AuthMiddleware() gin.HandlerFunc {
 }
 
 // RequirePermission checks if the user has a specific permission.
+// Supports both action-based and path+method-based access control.
 func RequirePermission(action string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		role, _ := c.Get("role")
 		roleStr, _ := role.(string)
+
+		// Check action-based permission
 		if !model.HasPermission(roleStr, action) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "权限不足"})
 			c.Abort()
 			return
 		}
+
+		// Path + method based RBAC
+		path := c.FullPath()
+		method := c.Request.Method
+		if !checkPathPermission(roleStr, path, method) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "权限不足: 无权访问此资源"})
+			c.Abort()
+			return
+		}
+
 		c.Next()
 	}
+}
+
+// checkPathPermission enforces path+method based access control.
+func checkPathPermission(role, path, method string) bool {
+	// Admin has full access
+	if role == model.RoleAdmin {
+		return true
+	}
+
+	// Operator: read/write on most resources, no user/tenant management
+	if role == model.RoleOperator {
+		// Block user/tenant management for operators
+		if contains(path, "/users") || contains(path, "/tenants") {
+			return method == "GET" // read-only
+		}
+		return true
+	}
+
+	// Viewer: read-only on all resources
+	if role == model.RoleViewer {
+		return method == "GET"
+	}
+
+	return false
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsStr(s, substr))
+}
+
+func containsStr(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }
 
 // --- Auth Handlers ---
@@ -97,22 +212,39 @@ func (h *AdminHandler) Login(c *gin.Context) {
 		return
 	}
 
+	// Check account lockout
+	if h.isLockedOut(req.Username) {
+		h.auditLog(c, 0, req.Username, "login_blocked", "auth", "", "账号已锁定")
+		c.JSON(http.StatusTooManyRequests, gin.H{
+			"error": fmt.Sprintf("账号已锁定，请 %d 分钟后重试", int(h.lockoutTime.Minutes())),
+		})
+		return
+	}
+
 	user, err := h.repo.GetUserByUsername(req.Username)
 	if err != nil || user == nil {
+		h.recordFailedLogin(req.Username)
+		h.auditLog(c, 0, req.Username, "login_failed", "auth", "", "用户不存在")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
 		return
 	}
 
 	// Check password hash
 	if !verifyPassword(req.Password, user.PasswordHash) {
+		h.recordFailedLogin(req.Username)
+		h.auditLog(c, user.ID, user.Username, "login_failed", "auth", "", "密码错误")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
 		return
 	}
 
 	if user.Status != "active" {
+		h.auditLog(c, user.ID, user.Username, "login_failed", "auth", "", "账号已禁用")
 		c.JSON(http.StatusForbidden, gin.H{"error": "账号已禁用"})
 		return
 	}
+
+	// Successful login — clear failed attempts
+	h.clearLoginAttempts(req.Username)
 
 	// Update last login
 	h.repo.UpdateLastLogin(user.ID)
