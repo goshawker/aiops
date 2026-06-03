@@ -11,8 +11,8 @@ import {
   FundOutlined,
 } from '@ant-design/icons'
 import ReactECharts from 'echarts-for-react'
-import { alertsApi, llmApi } from '@/api'
-import type { Incident } from '@/api/alerts'
+import { alertsApi, llmApi, metricsApi } from '@/api'
+import type { Incident, AlertEvent } from '@/api/alerts'
 import type { SummaryResponse as LlmSummary } from '@/api/llm'
 import { useAppStore } from '@/store/app'
 
@@ -23,22 +23,14 @@ export default function Dashboard() {
   const [summary, setSummary] = useState<LlmSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [healthScore, setHealthScore] = useState(85)
-  const [alertTrend] = useState<{
-    hours: string[];
-    critical: number[];
-    warning: number[];
-    info: number[];
+  const [resourceUsage, setResourceUsage] = useState({ cpu: 0, memory: 0, disk: 0, network: 0 })
+  const [alertTrend, setAlertTrend] = useState<{
+    hours: string[]; critical: number[]; warning: number[]; info: number[]
   }>({
     hours: Array.from({ length: 24 }, (_, i) => `${i}:00`),
     critical: Array(24).fill(0),
     warning: Array(24).fill(0),
     info: Array(24).fill(0),
-  })
-  const [resourceUsage] = useState({
-    cpu: 0,
-    memory: 0,
-    disk: 0,
-    network: 0,
   })
   const { setAssistantVisible } = useAppStore()
 
@@ -46,22 +38,65 @@ export default function Dashboard() {
 
   const loadData = async () => {
     try {
-      const [incidentsRes, summaryRes] = await Promise.allSettled([
+      const [incidentsRes, eventsRes, cpuRes, memRes, diskRes] = await Promise.allSettled([
         alertsApi.listIncidents({ status: 'open', limit: 10 }),
-        llmApi.summary({
-          metrics: [
-            { name: 'cpu_usage', value: resourceUsage.cpu },
-            { name: 'memory_usage', value: resourceUsage.memory },
-            { name: 'disk_usage', value: resourceUsage.disk },
-          ],
-        }),
+        alertsApi.listEvents({ limit: 200 }),
+        metricsApi.instant('100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)'),
+        metricsApi.instant('(1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100'),
+        metricsApi.instant('(1 - node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100'),
       ])
+
+      // Incidents
       if (incidentsRes.status === 'fulfilled') setIncidents(incidentsRes.value.data || [])
-      if (summaryRes.status === 'fulfilled') {
-        setSummary(summaryRes.value)
-        if (summaryRes.value.status === 'critical') setHealthScore(30)
-        else if (summaryRes.value.status === 'warning') setHealthScore(65)
+
+      // Resource usage from metrics
+      const extractValue = (res: PromiseSettledResult<any>): number => {
+        if (res.status !== 'fulfilled') return 0
+        const data = res.value?.data
+        if (!data || data.length === 0) return 0
+        const lastVal = data[0]?.values
+        return lastVal ? Math.round(lastVal[lastVal.length - 1]?.value || 0) : 0
+      }
+
+      const cpu = extractValue(cpuRes)
+      const mem = extractValue(memRes)
+      const disk = extractValue(diskRes)
+      setResourceUsage({ cpu, memory: mem, disk, network: 0 })
+
+      // Build 24h alert trend from events
+      if (eventsRes.status === 'fulfilled') {
+        const events: AlertEvent[] = eventsRes.value.data || []
+        const hours = Array.from({ length: 24 }, (_, i) => `${i}:00`)
+        const critical = Array(24).fill(0)
+        const warning = Array(24).fill(0)
+        const info = Array(24).fill(0)
+
+        events.forEach((e) => {
+          const h = new Date(e.fired_at).getHours()
+          if (e.severity === 'critical') critical[h]++
+          else if (e.severity === 'warning') warning[h]++
+          else info[h]++
+        })
+
+        setAlertTrend({ hours, critical, warning, info })
+      }
+
+      // LLM summary with real metrics
+      try {
+        const summaryRes = await llmApi.summary({
+          metrics: [
+            { name: 'cpu_usage', value: cpu },
+            { name: 'memory_usage', value: mem },
+            { name: 'disk_usage', value: disk },
+          ],
+        })
+        setSummary(summaryRes)
+        if (summaryRes.status === 'critical') setHealthScore(30)
+        else if (summaryRes.status === 'warning') setHealthScore(65)
         else setHealthScore(95)
+      } catch {
+        // LLM may not be available
+        setHealthScore(cpu > 90 || mem > 95 ? 30 : cpu > 70 || mem > 80 ? 65 : 95)
       }
     } catch (e) {
       console.error('Failed to load dashboard:', e)
