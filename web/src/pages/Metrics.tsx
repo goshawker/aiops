@@ -29,7 +29,7 @@ export default function Metrics() {
   const [showChart, setShowChart] = useState(true)
   const [timeRange, setTimeRange] = useState('1h')
   const [step, setStep] = useState('60s')
-  const chartRef = useRef<any>(null)
+  const chartRef = useRef<ReactECharts>(null)
 
   const handleQuery = async () => {
     if (!query.trim()) return
@@ -51,8 +51,9 @@ export default function Metrics() {
       if (res.data?.length === 0) {
         message.info('查询无结果')
       }
-    } catch (e: any) {
-      message.error(e?.error || '查询失败')
+    } catch (e: unknown) {
+      const err = e as { error?: string; message?: string }
+      message.error(err?.error || err?.message || '查询失败')
     } finally {
       setLoading(false)
     }
@@ -82,11 +83,11 @@ export default function Metrics() {
     return {
       tooltip: {
         trigger: 'axis',
-        formatter: (params: any[]) => {
+        formatter: (params: { data: [number, number]; color: string; seriesName: string }[]) => {
           if (!params.length) return ''
           const time = new Date(params[0].data[0]).toLocaleString('zh-CN')
           let html = `<div style="font-size:12px"><b>${time}</b></div>`
-          params.forEach((p: any) => {
+          params.forEach((p) => {
             html += `<div style="display:flex;align-items:center;gap:4px">`
             html += `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color}"></span>`
             html += `<span>${p.seriesName}: <b>${p.data[1]?.toFixed(4)}</b></span></div>`
@@ -150,7 +151,7 @@ export default function Metrics() {
       title: '最新值',
       key: 'value',
       width: 120,
-      render: (_: any, record: MetricSeries) => {
+      render: (_: unknown, record: MetricSeries) => {
         const last = record.values?.[record.values.length - 1]
         return last ? <Text code>{last.value.toFixed(4)}</Text> : '-'
       },
@@ -159,7 +160,7 @@ export default function Metrics() {
       title: '数据点',
       key: 'count',
       width: 80,
-      render: (_: any, record: MetricSeries) => record.values?.length || 0,
+      render: (_: unknown, record: MetricSeries) => record.values?.length || 0,
     },
   ]
 
