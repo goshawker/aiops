@@ -125,6 +125,30 @@ tls-setup-ip:
 tls-setup-self-signed:
 	@bash deploy/tls/setup-tls.sh --self-signed
 
+## backup: run full backup (SQLite + ClickHouse + VictoriaMetrics)
+backup:
+	@bash deploy/backup/backup.sh
+
+## backup-sqlite: backup SQLite only
+backup-sqlite:
+	@bash deploy/backup/backup.sh --sqlite
+
+## backup-clickhouse: backup ClickHouse only
+backup-clickhouse:
+	@bash deploy/backup/backup.sh --clickhouse
+
+## backup-vm: backup VictoriaMetrics only
+backup-vm:
+	@bash deploy/backup/backup.sh --vm
+
+## backup-list: list available backups
+backup-list:
+	@bash deploy/backup/restore.sh --list
+
+## backup-restore: restore from backup (usage: make backup-restore TYPE=sqlite FILE=/path/to/backup.db)
+backup-restore:
+	@bash deploy/backup/restore.sh --$(TYPE) $(FILE)
+
 ## docker-logs: show service logs
 docker-logs:
 	@docker compose -f deploy/docker-compose/docker-compose.yml logs -f
