@@ -58,3 +58,6 @@ deploy/docker-compose/data/
 *.log
 .gstack/
 .claude/
+
+# TLS certificates (never commit private keys)
+deploy/tls/certs/

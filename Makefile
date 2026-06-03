@@ -113,6 +113,18 @@ docker-down:
 ## docker-restart: restart all services
 docker-restart: docker-down docker-up
 
+## tls-setup-domain: setup TLS with Let's Encrypt (usage: make tls-setup-domain DOMAIN=aiops.example.com)
+tls-setup-domain:
+	@bash deploy/tls/setup-tls.sh --domain $(DOMAIN)
+
+## tls-setup-ip: setup TLS with self-signed cert for IP (usage: make tls-setup-ip IP=192.168.1.100)
+tls-setup-ip:
+	@bash deploy/tls/setup-tls.sh --ip $(IP)
+
+## tls-setup-self-signed: setup TLS with self-signed cert (localhost)
+tls-setup-self-signed:
+	@bash deploy/tls/setup-tls.sh --self-signed
+
 ## docker-logs: show service logs
 docker-logs:
 	@docker compose -f deploy/docker-compose/docker-compose.yml logs -f
