@@ -11,32 +11,36 @@ services:
   victoria-metrics:
     image: victoriametrics/victoria-metrics:latest
     container_name: aiops-vm
-    ports:
-      - "8428:8428"
     volumes:
       - vm-data:/victoria-metrics-data
     command:
       - "--retentionPeriod=30d"
       - "--storageDataPath=/victoria-metrics-data"
       - "--httpListenAddr=:8428"
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+          cpus: "2.0"
     restart: unless-stopped
 
   clickhouse:
     image: clickhouse/clickhouse-server:latest
     container_name: aiops-clickhouse
-    ports:
-      - "8123:8123"   # HTTP
-      - "9000:9000"   # Native
     volumes:
       - ch-data:/var/lib/clickhouse
       - ../clickhouse:/docker-entrypoint-initdb.d
     environment:
       CLICKHOUSE_DB: aiops
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+          cpus: "2.0"
     restart: unless-stopped
 
   sqlite:
-    # SQLite doesn't need a server - just a volume for the file
     image: alpine:3.20
     container_name: aiops-sqlite-init
     volumes:
@@ -51,31 +55,37 @@ services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
     container_name: aiops-zookeeper
-    ports:
-      - "2181:2181"
     volumes:
       - zk-data:/var/lib/zookeeper/data
     environment:
       ZOOKEEPER_CLIENT_PORT: "2181"
       ZOOKEEPER_TICK_TIME: "2000"
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: "0.5"
     restart: unless-stopped
 
   kafka:
     image: confluentinc/cp-kafka:7.5.0
     container_name: aiops-kafka
-    ports:
-      - "9092:9092"
     volumes:
       - kafka-data:/var/lib/kafka/data
     environment:
       KAFKA_BROKER_ID: "1"
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
     depends_on:
       - zookeeper
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: "1.0"
     restart: unless-stopped
 
   # ──────────────────────────────────────
@@ -85,8 +95,6 @@ services:
   node-exporter:
     image: prom/node-exporter:v1.8.2
     container_name: aiops-node-exporter
-    ports:
-      - "9100:9100"
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
@@ -96,13 +104,16 @@ services:
       - "--path.sysfs=/host/sys"
       - "--path.rootfs=/rootfs"
       - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+          cpus: "0.25"
     restart: unless-stopped
 
   vmagent:
     image: victoriametrics/vmagent:v1.106.1
     container_name: aiops-vmagent
-    ports:
-      - "8429:8429"
     volumes:
       - vmagent-data:/vmagent
       - ./vmagent.yml:/etc/vmagent/config.yml
@@ -113,10 +124,15 @@ services:
     depends_on:
       - victoria-metrics
       - node-exporter
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: "0.5"
     restart: unless-stopped
 
   # ──────────────────────────────────────
-  # Application Services
+  # Application Services (internal only)
   # ──────────────────────────────────────
 
   gateway:
@@ -127,7 +143,7 @@ services:
         SERVICE_NAME: gateway
     container_name: aiops-gateway
     ports:
-      - "8080:8080"
+      - "8080:8080"  # API gateway — only externally exposed Go service
     environment:
       SERVICE_NAME: gateway
       PORT: "8080"
@@ -145,6 +161,11 @@ services:
       - victoria-metrics
       - clickhouse
       - kafka
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: "1.0"
     restart: unless-stopped
 
   query-service:
@@ -154,8 +175,8 @@ services:
       args:
         SERVICE_NAME: query
     container_name: aiops-query
-    ports:
-      - "8081:8081"
+    expose:
+      - "8081"  # Internal only — accessed via gateway
     environment:
       SERVICE_NAME: query
       PORT: "8081"
@@ -163,6 +184,11 @@ services:
     depends_on:
       - victoria-metrics
       - clickhouse
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: "0.5"
     restart: unless-stopped
 
   alert-engine:
@@ -172,14 +198,19 @@ services:
       args:
         SERVICE_NAME: alert
     container_name: aiops-alert
-    ports:
-      - "8082:8082"
+    expose:
+      - "8082"  # Internal only
     environment:
       SERVICE_NAME: alert
       PORT: "8082"
       GIN_MODE: release
     depends_on:
       - kafka
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: "0.5"
     restart: unless-stopped
 
   admin-service:
@@ -189,13 +220,18 @@ services:
       args:
         SERVICE_NAME: admin
     container_name: aiops-admin
-    ports:
-      - "8083:8083"
+    expose:
+      - "8083"  # Internal only
     environment:
       SERVICE_NAME: admin
       PORT: "8083"
       GIN_MODE: release
       JWT_SECRET: "${JWT_SECRET:?JWT_SECRET environment variable is required}"
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: "0.5"
     restart: unless-stopped
 
   collector-service:
@@ -205,12 +241,17 @@ services:
       args:
         SERVICE_NAME: collector
     container_name: aiops-collector
-    ports:
-      - "8084:8084"
+    expose:
+      - "8084"  # Internal only — agents connect via gateway/nginx
     environment:
       SERVICE_NAME: collector
       PORT: "8084"
       GIN_MODE: release
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: "0.5"
     restart: unless-stopped
 
   job-engine:
@@ -220,16 +261,21 @@ services:
       args:
         SERVICE_NAME: job
     container_name: aiops-job
-    ports:
-      - "8085:8085"
+    expose:
+      - "8085"  # Internal only
     environment:
       SERVICE_NAME: job
       PORT: "8085"
       GIN_MODE: release
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: "0.5"
     restart: unless-stopped
 
   # ──────────────────────────────────────
-  # AI Services (Python)
+  # AI Services (Python, internal only)
   # ──────────────────────────────────────
 
   anomaly-service:
@@ -239,14 +285,19 @@ services:
       args:
         SERVICE_NAME: anomaly
     container_name: aiops-anomaly
-    ports:
-      - "5001:5001"
+    expose:
+      - "5001"  # Internal only
     environment:
       SERVICE_NAME: anomaly
       PORT: "5001"
       KAFKA_BROKERS: "kafka:9092"
     depends_on:
       - kafka
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: "1.0"
     restart: unless-stopped
 
   alert-agg-service:
@@ -256,14 +307,19 @@ services:
       args:
         SERVICE_NAME: alert_agg
     container_name: aiops-alert-agg
-    ports:
-      - "5003:5003"
+    expose:
+      - "5003"  # Internal only
     environment:
       SERVICE_NAME: alert_agg
       PORT: "5003"
       KAFKA_BROKERS: "kafka:9092"
     depends_on:
       - kafka
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: "0.5"
     restart: unless-stopped
 
   llm-service:
@@ -273,22 +329,27 @@ services:
       args:
         SERVICE_NAME: llm
     container_name: aiops-llm
-    ports:
-      - "5004:5004"
+    expose:
+      - "5004"  # Internal only
     environment:
       SERVICE_NAME: llm
       PORT: "5004"
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: "1.0"
     restart: unless-stopped
 
   # ──────────────────────────────────────
-  # Graph Database (NebulaGraph)
+  # Graph Database (NebulaGraph, internal only)
   # ──────────────────────────────────────
 
   nebula-metad:
     image: vesoft/nebula-metad:v3.8.0
     container_name: aiops-nebula-metad
-    ports:
-      - "9559:9559"
+    expose:
+      - "9559"  # Internal only
     volumes:
       - nebula-meta:/data
     environment:
@@ -297,14 +358,19 @@ services:
       - --meta_server_addrs=nebula-metad:9559
       - --local_ip=nebula-metad
       - --ws_ip=nebula-metad
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: "0.25"
     restart: unless-stopped
 
   nebula-storaged:
     image: vesoft/nebula-storaged:v3.8.0
     container_name: aiops-nebula-storaged
-    ports:
-      - "9779:9779"
-      - "9780:9780"
+    expose:
+      - "9779"  # Internal only
+      - "9780"
     volumes:
       - nebula-storage:/data
     environment:
@@ -315,14 +381,19 @@ services:
       - --ws_ip=nebula-storaged
     depends_on:
       - nebula-metad
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: "0.5"
     restart: unless-stopped
 
   nebula-graphd:
     image: vesoft/nebula-graphd:v3.8.0
     container_name: aiops-nebula-graphd
-    ports:
-      - "9669:9669"   # NebulaGraph
-      - "19669:19669" # HTTP
+    expose:
+      - "9669"   # Internal only
+      - "19669"
     environment:
       TZ: Asia/Shanghai
     command:
@@ -332,10 +403,15 @@ services:
     depends_on:
       - nebula-metad
       - nebula-storaged
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: "0.5"
     restart: unless-stopped
 
   # ──────────────────────────────────────
-  # Frontend
+  # Frontend (externally exposed)
   # ──────────────────────────────────────
 
   web:
@@ -352,6 +428,11 @@ services:
       - ../../bin:/opt/aiops/bin:ro               # Agent binaries
     depends_on:
       - gateway
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+          cpus: "0.25"
     restart: unless-stopped
 
 volumes:

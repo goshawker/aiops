@@ -3,6 +3,9 @@ package handler
 import (
 	"fmt"
 	"net/http"
+	"path/filepath"
+	"regexp"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"aiops/internal/model"
@@ -236,15 +239,37 @@ func (h *CollectorHandler) ScrapeTargets(c *gin.Context) {
 }
 
 // DownloadAgent serves the agent binary for the target platform.
-// GET /api/v1/collectors/download/:os-:arch
+// GET /api/v1/collectors/download/:osarch
 func (h *CollectorHandler) DownloadAgent(c *gin.Context) {
 	osarch := c.Param("osarch") // e.g. "linux-amd64", "linux-arm64"
+
+	// Validate osarch against allowed patterns to prevent path traversal
+	if !isValidOsArch(osarch) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的平台标识"})
+		return
+	}
+
 	agentDir := c.GetString("agent_dir")
 	if agentDir == "" {
 		agentDir = "deploy/agent"
 	}
-	filePath := fmt.Sprintf("%s/aiops-agent-%s", agentDir, osarch)
-	c.File(filePath)
+
+	// Clean path and verify it stays within agentDir
+	filePath := filepath.Join(agentDir, fmt.Sprintf("aiops-agent-%s", osarch))
+	cleanPath := filepath.Clean(filePath)
+	if !strings.HasPrefix(cleanPath, filepath.Clean(agentDir)) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "访问被拒绝"})
+		return
+	}
+
+	c.File(cleanPath)
+}
+
+// validOsArchPattern matches valid platform identifiers.
+var validOsArchPattern = regexp.MustCompile(`^(linux|darwin)-(amd64|arm64|loong64)$`)
+
+func isValidOsArch(s string) bool {
+	return validOsArchPattern.MatchString(s)
 }
 
 // ServeInstallScript serves the install.sh script.
