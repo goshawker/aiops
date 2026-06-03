@@ -2,28 +2,11 @@ import { useState, useRef } from 'react'
 import { Card, Typography, Input, Button, Space, Tag, message, Row, Col, List, Progress, Tooltip } from 'antd'
 import { SearchOutlined, AimOutlined } from '@ant-design/icons'
 import ReactECharts from 'echarts-for-react'
-import client from '@/api/client'
+import { rcaApi } from '@/api/rca'
+import type { RootCause, CausalGraph } from '@/api/rca'
 
 const { Text } = Typography
 const { TextArea } = Input
-
-interface RootCause {
-  metric_name: string
-  score: number
-  reason: string
-  related_metrics: string[]
-  evidence: string[]
-}
-
-interface CausalGraph {
-  nodes: string[]
-  edges: Array<{
-    source: string
-    target: string
-    confidence: number
-    lag: number
-  }>
-}
 
 export default function RCA() {
   const [affectedMetrics, setAffectedMetrics] = useState('')
@@ -46,17 +29,17 @@ export default function RCA() {
 
     setLoading(true)
     try {
-      const res = await client.post('/rca/analyze', { affected_metrics: metrics })
-      setResults(res.data?.root_causes || [])
+      const res = await rcaApi.analyze({ affected_metrics: metrics })
+      setResults(res.root_causes || [])
 
       // Also fetch graph
       try {
-        const graphRes = await client.get('/rca/graph')
-        setGraph(graphRes.data)
-      } catch (e) {
+        const graphRes = await rcaApi.graph()
+        setGraph(graphRes)
+      } catch {
         // Graph may not be available
       }
-    } catch (e) {
+    } catch {
       message.error('分析失败')
     } finally {
       setLoading(false)

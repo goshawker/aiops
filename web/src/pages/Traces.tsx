@@ -1,32 +1,11 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Card, Table, Tag, Space, Typography, Select, message, Tooltip, Descriptions, Drawer } from 'antd'
 import ReactECharts from 'echarts-for-react'
-import client from '@/api/client'
 import { useSearchParams } from 'react-router-dom'
+import { tracesApi } from '@/api/traces'
+import type { TraceSummary, Span } from '@/api/traces'
 
 const { Text } = Typography
-
-interface TraceSummary {
-  trace_id: string
-  root_service: string
-  root_operation: string
-  span_count: number
-  duration_ms: number
-  status_code: string
-  start_time: string
-}
-
-interface Span {
-  timestamp: string
-  trace_id: string
-  span_id: string
-  parent_span_id: string
-  service: string
-  operation: string
-  duration_ms: number
-  status_code: string
-  attributes: Record<string, string>
-}
 
 interface SpanNode extends Span {
   depth: number
@@ -42,7 +21,6 @@ function buildSpanTree(spans: Span[]): SpanNode[] {
 
   const minTime = Math.min(...spans.map((s) => new Date(s.timestamp).getTime()))
 
-  // Build nodes
   spans.forEach((s) => {
     map.set(s.span_id, {
       ...s,
@@ -52,7 +30,6 @@ function buildSpanTree(spans: Span[]): SpanNode[] {
     })
   })
 
-  // Build tree
   spans.forEach((s) => {
     const node = map.get(s.span_id)!
     if (s.parent_span_id && map.has(s.parent_span_id)) {
@@ -62,7 +39,6 @@ function buildSpanTree(spans: Span[]): SpanNode[] {
     }
   })
 
-  // Assign depths
   function setDepth(node: SpanNode, depth: number) {
     node.depth = depth
     node.children.sort((a, b) => a.totalOffset - b.totalOffset)
@@ -70,7 +46,6 @@ function buildSpanTree(spans: Span[]): SpanNode[] {
   }
   roots.forEach((r) => setDepth(r, 0))
 
-  // Flatten for display
   const flat: SpanNode[] = []
   function flatten(node: SpanNode) {
     flat.push(node)
@@ -93,11 +68,12 @@ export default function Traces() {
   const [selectedSpan, setSelectedSpan] = useState<Span | null>(null)
 
   useEffect(() => {
+    const controller = new AbortController()
     loadTraces()
     loadServices()
+    return () => controller.abort()
   }, [serviceFilter])
 
-  // Auto-load trace from URL params
   useEffect(() => {
     const traceId = searchParams.get('trace_id')
     if (traceId) {
@@ -108,11 +84,10 @@ export default function Traces() {
   const loadTraces = async () => {
     setLoading(true)
     try {
-      const params: any = { limit: 100 }
-      if (serviceFilter) params.service = serviceFilter
-      const res = await client.get('/traces', { params })
-      setTraces(res.data?.data || [])
-    } catch (e) {
+      const res = await tracesApi.list({ limit: 100, service: serviceFilter || undefined })
+      setTraces(res.data || [])
+    } catch (e: any) {
+      if (e?.name === 'CanceledError') return
       message.error('加载链路列表失败')
     } finally {
       setLoading(false)
@@ -121,24 +96,24 @@ export default function Traces() {
 
   const loadServices = async () => {
     try {
-      const res = await client.get('/traces/services')
-      setServices(res.data?.data || [])
-    } catch (e) {
-      // Services list is optional, no error needed
+      const res = await tracesApi.services()
+      setServices(res.data || [])
+    } catch {
+      // Services list is optional
     }
   }
 
   const loadTraceDetail = async (traceID: string) => {
     try {
-      const res = await client.get(`/traces/${traceID}`)
-      setSelectedTrace(res.data?.data || [])
+      const res = await tracesApi.detail(traceID)
+      setSelectedTrace(res.data || [])
       setSelectedTraceID(traceID)
-    } catch (e) {
+    } catch (e: any) {
+      if (e?.name === 'CanceledError') return
       message.error('加载链路详情失败')
     }
   }
 
-  // Service color map
   const serviceColorMap = useMemo(() => {
     const allServices = [...new Set(selectedTrace.map((s) => s.service))]
     const map: Record<string, string> = {}
@@ -148,13 +123,11 @@ export default function Traces() {
     return map
   }, [selectedTrace])
 
-  // Build waterfall data
   const waterfallData = useMemo(() => {
     if (selectedTrace.length === 0) return []
     return buildSpanTree(selectedTrace)
   }, [selectedTrace])
 
-  // Gantt chart option
   const getGanttOption = () => {
     if (waterfallData.length === 0) return null
 
@@ -177,8 +150,8 @@ export default function Traces() {
 
     return {
       tooltip: {
-        formatter: (params: any) => {
-          const span = params.data.span
+        formatter: (params: { data: { span: SpanNode } }) => {
+          const { span } = params.data
           return `<div style="font-size:12px;max-width:400px">
             <b>${span.service}: ${span.operation}</b><br/>
             Span ID: ${span.span_id}<br/>
@@ -195,9 +168,7 @@ export default function Traces() {
         name: 'ms',
         min: 0,
         max: Math.ceil(maxDuration * 1.1),
-        axisLabel: {
-          formatter: (val: number) => val.toFixed(0),
-        },
+        axisLabel: { formatter: (val: number) => val.toFixed(0) },
       },
       yAxis: {
         type: 'category',
@@ -212,10 +183,10 @@ export default function Traces() {
       series: [
         {
           type: 'custom',
-          renderItem: (_params: any, api: any) => {
+          renderItem: (_params: unknown, api: { coord: (v: number[]) => number[]; value: (i: number) => number; size: (v: number[][]) => number[]; style: () => Record<string, unknown> }) => {
             const start = api.coord([api.value(0), 0])
             const end = api.coord([api.value(1), 0])
-            const height = api.size([0, 1])[1] * 0.6
+            const height = api.size([[0, 1]])[1] * 0.6
 
             return {
               type: 'rect',
@@ -228,10 +199,8 @@ export default function Traces() {
               style: api.style(),
             }
           },
-          encode: {
-            x: [0, 1],
-          },
-          data: data,
+          encode: { x: [0, 1] },
+          data,
         },
       ],
     }
@@ -245,38 +214,17 @@ export default function Traces() {
       width: 200,
       render: (id: string) => (
         <Tooltip title={id}>
-          <Tag
-            style={{ cursor: 'pointer', fontFamily: 'monospace' }}
-            onClick={() => loadTraceDetail(id)}
-          >
+          <Tag style={{ cursor: 'pointer', fontFamily: 'monospace' }} onClick={() => loadTraceDetail(id)}>
             {id.substring(0, 16)}...
           </Tag>
         </Tooltip>
       ),
     },
+    { title: '服务', dataIndex: 'root_service', key: 'root_service', width: 120 },
+    { title: '操作', dataIndex: 'root_operation', key: 'root_operation', ellipsis: true },
+    { title: 'Spans', dataIndex: 'span_count', key: 'span_count', width: 70 },
     {
-      title: '服务',
-      dataIndex: 'root_service',
-      key: 'root_service',
-      width: 120,
-    },
-    {
-      title: '操作',
-      dataIndex: 'root_operation',
-      key: 'root_operation',
-      ellipsis: true,
-    },
-    {
-      title: 'Spans',
-      dataIndex: 'span_count',
-      key: 'span_count',
-      width: 70,
-    },
-    {
-      title: '耗时',
-      dataIndex: 'duration_ms',
-      key: 'duration_ms',
-      width: 100,
+      title: '耗时', dataIndex: 'duration_ms', key: 'duration_ms', width: 100,
       render: (ms: number) => (
         <Text code style={{ color: ms > 1000 ? '#ff4d4f' : ms > 500 ? '#faad14' : '#52c41a' }}>
           {ms.toFixed(1)}ms
@@ -284,24 +232,17 @@ export default function Traces() {
       ),
     },
     {
-      title: '状态',
-      dataIndex: 'status_code',
-      key: 'status_code',
-      width: 80,
+      title: '状态', dataIndex: 'status_code', key: 'status_code', width: 80,
       render: (s: string) => <Tag color={s === 'ERROR' ? 'red' : 'green'}>{s}</Tag>,
     },
     {
-      title: '时间',
-      dataIndex: 'start_time',
-      key: 'start_time',
-      width: 170,
+      title: '时间', dataIndex: 'start_time', key: 'start_time', width: 170,
       render: (t: string) => new Date(t).toLocaleString('zh-CN'),
     },
   ]
 
   return (
     <div>
-      {/* Filters */}
       <Card size="small" style={{ marginBottom: 16 }}>
         <Space>
           <Select
@@ -316,7 +257,6 @@ export default function Traces() {
         </Space>
       </Card>
 
-      {/* Trace list */}
       <Card title={`链路列表 (${traces.length})`} size="small" style={{ marginBottom: 16 }}>
         <Table
           dataSource={traces}
@@ -333,22 +273,14 @@ export default function Traces() {
         />
       </Card>
 
-      {/* Trace detail */}
       {selectedTrace.length > 0 && (
         <Card
-          title={
-            <Space>
-              <span>链路详情: {selectedTraceID.substring(0, 16)}...</span>
-              <Tag>{selectedTrace.length} spans</Tag>
-            </Space>
-          }
+          title={<Space><span>链路详情: {selectedTraceID.substring(0, 16)}...</span><Tag>{selectedTrace.length} spans</Tag></Space>}
           size="small"
           extra={
             <Space>
               {Object.entries(serviceColorMap).map(([svc, color]) => (
-                <Tag key={svc} color={color} style={{ borderRadius: 3 }}>
-                  {svc}
-                </Tag>
+                <Tag key={svc} color={color} style={{ borderRadius: 3 }}>{svc}</Tag>
               ))}
             </Space>
           }
@@ -357,7 +289,7 @@ export default function Traces() {
             option={getGanttOption()}
             style={{ height: Math.max(waterfallData.length * 32 + 80, 200) }}
             onEvents={{
-              click: (params: any) => {
+              click: (params: { data?: { span?: Span } }) => {
                 if (params.data?.span) {
                   setSelectedSpan(params.data.span)
                   setDetailOpen(true)
@@ -368,51 +300,20 @@ export default function Traces() {
         </Card>
       )}
 
-      {/* Span detail drawer */}
-      <Drawer
-        title="Span 详情"
-        open={detailOpen}
-        onClose={() => setDetailOpen(false)}
-        width={480}
-        destroyOnClose
-      >
+      <Drawer title="Span 详情" open={detailOpen} onClose={() => setDetailOpen(false)} width={480} destroyOnClose>
         {selectedSpan && (
           <Descriptions column={1} size="small" bordered>
-            <Descriptions.Item label="Span ID">
-              <Text code copyable>{selectedSpan.span_id}</Text>
-            </Descriptions.Item>
-            <Descriptions.Item label="Parent Span ID">
-              <Text code copyable>{selectedSpan.parent_span_id || '(root)'}</Text>
-            </Descriptions.Item>
-            <Descriptions.Item label="Trace ID">
-              <Text code copyable>{selectedSpan.trace_id}</Text>
-            </Descriptions.Item>
-            <Descriptions.Item label="服务">
-              <Tag color={serviceColorMap[selectedSpan.service]}>{selectedSpan.service}</Tag>
-            </Descriptions.Item>
+            <Descriptions.Item label="Span ID"><Text code copyable>{selectedSpan.span_id}</Text></Descriptions.Item>
+            <Descriptions.Item label="Parent Span ID"><Text code copyable>{selectedSpan.parent_span_id || '(root)'}</Text></Descriptions.Item>
+            <Descriptions.Item label="Trace ID"><Text code copyable>{selectedSpan.trace_id}</Text></Descriptions.Item>
+            <Descriptions.Item label="服务"><Tag color={serviceColorMap[selectedSpan.service]}>{selectedSpan.service}</Tag></Descriptions.Item>
             <Descriptions.Item label="操作">{selectedSpan.operation}</Descriptions.Item>
-            <Descriptions.Item label="耗时">
-              <Text
-                strong
-                style={{ color: selectedSpan.duration_ms > 500 ? '#ff4d4f' : '#52c41a' }}
-              >
-                {selectedSpan.duration_ms.toFixed(2)}ms
-              </Text>
-            </Descriptions.Item>
-            <Descriptions.Item label="状态">
-              <Tag color={selectedSpan.status_code === 'ERROR' ? 'red' : 'green'}>
-                {selectedSpan.status_code}
-              </Tag>
-            </Descriptions.Item>
-            <Descriptions.Item label="时间">
-              {new Date(selectedSpan.timestamp).toLocaleString('zh-CN')}
-            </Descriptions.Item>
+            <Descriptions.Item label="耗时"><Text strong style={{ color: selectedSpan.duration_ms > 500 ? '#ff4d4f' : '#52c41a' }}>{selectedSpan.duration_ms.toFixed(2)}ms</Text></Descriptions.Item>
+            <Descriptions.Item label="状态"><Tag color={selectedSpan.status_code === 'ERROR' ? 'red' : 'green'}>{selectedSpan.status_code}</Tag></Descriptions.Item>
+            <Descriptions.Item label="时间">{new Date(selectedSpan.timestamp).toLocaleString('zh-CN')}</Descriptions.Item>
             {selectedSpan.attributes && Object.keys(selectedSpan.attributes).length > 0 && (
               <Descriptions.Item label="属性">
-                <pre style={{
-                  margin: 0, fontSize: 11, maxHeight: 200, overflow: 'auto',
-                  background: '#fafafa', padding: 8, borderRadius: 4,
-                }}>
+                <pre style={{ margin: 0, fontSize: 11, maxHeight: 200, overflow: 'auto', background: '#fafafa', padding: 8, borderRadius: 4 }}>
                   {JSON.stringify(selectedSpan.attributes, null, 2)}
                 </pre>
               </Descriptions.Item>

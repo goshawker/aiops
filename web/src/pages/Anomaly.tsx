@@ -1,7 +1,10 @@
 import { Card, Form, Input, InputNumber, Select, Button, message, Tag, Space, Row, Col, Statistic, Table, Tooltip, Typography } from 'antd'
 import { useState, useEffect } from 'react'
 import { ThunderboltOutlined, BugOutlined, CheckCircleOutlined, CloseCircleOutlined, WarningOutlined } from '@ant-design/icons'
-import client from '@/api/client'
+import { anomalyApi } from '@/api/anomaly'
+import type { ModelStatus, DetectResult } from '@/api/anomaly'
+import { alertsApi } from '@/api'
+import type { AlertEvent } from '@/api/alerts'
 
 const { Text } = Typography
 
@@ -25,17 +28,6 @@ const statusColor: Record<string, string> = {
   'dismissed': 'default',
 }
 
-interface ModelStatus {
-  river_available: boolean
-  model_count: number
-  models: Record<string, {
-    point_count: number
-    warmup_done: boolean
-    has_river_model: boolean
-    recent_score: number
-  }>
-}
-
 interface AnomalyEvent {
   id: number
   metric_name: string
@@ -51,53 +43,54 @@ interface AnomalyEvent {
 
 export default function Anomaly() {
   const [events, setEvents] = useState<AnomalyEvent[]>([])
-  const [result, setResult] = useState<any>(null)
+  const [result, setResult] = useState<DetectResult | null>(null)
   const [detectLoading, setDetectLoading] = useState(false)
   const [modelStatus, setModelStatus] = useState<ModelStatus | null>(null)
 
-  useEffect(() => { loadStatus() }, [])
-
   useEffect(() => {
-    const loadEvents = async () => {
-      try {
-        const res = await client.get('/alerts/events', { params: { limit: 50 } })
-        const data = res.data.data || []
-        // Map to AnomalyEvent structure
-        const mapped = data.map((e: any) => ({
-          id: e.id,
-          metric_name: e.source,
-          anomaly_type: e.title,
-          severity: e.severity,
-          value: Number(e.value) || 0,
-          baseline: Number(e.threshold) || 0,
-          confidence: 0,
-          status: e.status,
-          detected_at: e.fired_at || e.created_at,
-          feedback: undefined,
-        }))
-        setEvents(mapped)
-      } catch (err) {
-        message.error('加载异常事件失败')
-      }
-    }
+    const controller = new AbortController()
+    loadStatus()
     loadEvents()
+    return () => controller.abort()
   }, [])
 
-  const loadStatus = async () => {
+  const loadEvents = async () => {
     try {
-      const res = await client.get('/anomaly/status')
-      setModelStatus(res.data)
-    } catch (e) {
-      // Anomaly service optional — no error shown
+      const res = await alertsApi.listEvents({ limit: 50 })
+      const data = res.data || []
+      const mapped: AnomalyEvent[] = data.map((e: AlertEvent) => ({
+        id: e.id,
+        metric_name: e.source,
+        anomaly_type: e.title,
+        severity: e.severity,
+        value: Number(e.value) || 0,
+        baseline: 0,
+        confidence: 0,
+        status: e.status,
+        detected_at: e.fired_at,
+        feedback: undefined,
+      }))
+      setEvents(mapped)
+    } catch {
+      message.error('加载异常事件失败')
     }
   }
 
-  const handleDetect = async (values: any) => {
+  const loadStatus = async () => {
+    try {
+      const res = await anomalyApi.status()
+      setModelStatus(res)
+    } catch {
+      // Anomaly service optional
+    }
+  }
+
+  const handleDetect = async (values: { metric_name: string; value: number }) => {
     setDetectLoading(true)
     try {
-      const res = await client.post('/anomaly/detect', values)
-      setResult(res.data)
-    } catch (e) { message.error('检测失败') }
+      const res = await anomalyApi.detect(values)
+      setResult(res)
+    } catch { message.error('检测失败') }
     finally { setDetectLoading(false) }
   }
 
@@ -120,7 +113,7 @@ export default function Anomaly() {
     { title: '状态', dataIndex: 'status', key: 'status', width: 100, render: (s: string) => <Tag color={statusColor[s]}>{s}</Tag> },
     {
       title: '操作', key: 'action', width: 160,
-      render: (_: any, record: AnomalyEvent) => (
+      render: (_: unknown, record: AnomalyEvent) => (
         <Space>
           {record.status === 'open' && (
             <>
@@ -139,7 +132,6 @@ export default function Anomaly() {
 
   return (
     <div>
-      {/* Stats + Model Status */}
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col span={4}>
           <Card size="small"><Statistic title="待处理" value={openCount} valueStyle={{ color: openCount > 0 ? '#ff4d4f' : '#52c41a' }} prefix={<WarningOutlined />} /></Card>
@@ -170,12 +162,7 @@ export default function Anomaly() {
         </Col>
       </Row>
 
-      {/* Anomaly Events Table */}
-      <Card
-        title={<Space><BugOutlined />异常事件</Space>}
-        size="small"
-        style={{ marginBottom: 16, padding: 12 }}
-      >
+      <Card title={<Space><BugOutlined />异常事件</Space>} size="small" style={{ marginBottom: 16, padding: 12 }}>
         <Table
           dataSource={events}
           columns={columns}
@@ -187,7 +174,6 @@ export default function Anomaly() {
         />
       </Card>
 
-      {/* Manual Detection */}
       <Row gutter={16} style={{ marginBottom: 16 }}>
         <Col span={12}>
           <Card title="手动检测" size="small">
@@ -216,8 +202,8 @@ export default function Anomaly() {
         <Col span={12}>
           <Card title="设置阈值规则" size="small">
             <Form layout="inline" onFinish={async (values) => {
-              try { await client.post('/anomaly/thresholds', values); message.success('阈值已设置') }
-              catch (e) { message.error('设置失败') }
+              try { await anomalyApi.setThreshold(values); message.success('阈值已设置') }
+              catch { message.error('设置失败') }
             }}>
               <Form.Item name="metric_name" label="指标" rules={[{ required: true }]}>
                 <Input placeholder="cpu_usage" style={{ width: 140 }} />

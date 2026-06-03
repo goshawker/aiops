@@ -2,21 +2,10 @@ import { useState, useEffect, useMemo } from 'react'
 import { Card, Typography, Tag, Space, Spin, Descriptions, Drawer, message } from 'antd'
 import { ClusterOutlined } from '@ant-design/icons'
 import ReactECharts from 'echarts-for-react'
-import client from '@/api/client'
+import { topologyApi } from '@/api/topology'
+import type { GraphData } from '@/api/topology'
 
 const { Text } = Typography
-
-interface GraphData {
-  nodes: string[]
-  edges: Array<{
-    source: string
-    target: string
-    confidence: number
-    lag: number
-  }>
-  metric_count: number
-  last_discovery: number
-}
 
 const NODE_COLORS: Record<string, string> = {
   host: '#52c41a',
@@ -47,15 +36,18 @@ export default function Topology() {
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
 
   useEffect(() => {
+    const controller = new AbortController()
     loadGraph()
+    return () => controller.abort()
   }, [])
 
   const loadGraph = async () => {
     setLoading(true)
     try {
-      const res = await client.get('/rca/graph')
-      setGraph(res.data)
-    } catch (e) {
+      const res = await topologyApi.graph()
+      setGraph(res)
+    } catch (e: any) {
+      if (e?.name === 'CanceledError') return
       message.error('加载拓扑数据失败')
     } finally {
       setLoading(false)
@@ -104,12 +96,12 @@ export default function Topology() {
     return {
       tooltip: {
         trigger: 'item',
-        formatter: (params: any) => {
-          if (params.dataType === 'edge') {
+        formatter: (params: { dataType?: string; data?: { source?: string; target?: string; value?: number; id?: string; name?: string } }) => {
+          if (params.dataType === 'edge' && params.data) {
             return `${params.data.source} → ${params.data.target}<br/>置信度: ${((params.data.value || 0) * 100).toFixed(0)}%`
           }
-          const type = getNodeType(params.data.id)
-          return `<b>${params.name}</b><br/>类型: ${typeLabel[type] || type}`
+          const type = getNodeType(params.data?.id || '')
+          return `<b>${params.data?.name || ''}</b><br/>类型: ${typeLabel[type] || type}`
         },
       },
       legend: {
@@ -170,7 +162,7 @@ export default function Topology() {
             option={getOption()}
             style={{ height: 500 }}
             onEvents={{
-              click: (params: any) => {
+              click: (params: { dataType?: string; data?: { id?: string } }) => {
                 if (params.dataType === 'node' && params.data?.id) {
                   setSelectedNode(params.data.id)
                   setDetailOpen(true)
