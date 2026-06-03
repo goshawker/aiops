@@ -52,7 +52,7 @@ export default function Dashboard() {
       if (incidentsRes.status === 'fulfilled') setIncidents(incidentsRes.value.data || [])
 
       // Resource usage from metrics
-      const extractValue = (res: PromiseSettledResult<any>): number => {
+      const extractValue = (res: PromiseSettledResult<{ data?: { values?: { value: number }[] }[] }>): number => {
         if (res.status !== 'fulfilled') return 0
         const data = res.value?.data
         if (!data || data.length === 0) return 0

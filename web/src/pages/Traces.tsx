@@ -86,8 +86,8 @@ export default function Traces() {
     try {
       const res = await tracesApi.list({ limit: 100, service: serviceFilter || undefined })
       setTraces(res.data || [])
-    } catch (e: any) {
-      if (e?.name === 'CanceledError') return
+    } catch (e: unknown) {
+      if ((e as Error)?.name === 'CanceledError') return
       message.error('加载链路列表失败')
     } finally {
       setLoading(false)
@@ -108,8 +108,8 @@ export default function Traces() {
       const res = await tracesApi.detail(traceID)
       setSelectedTrace(res.data || [])
       setSelectedTraceID(traceID)
-    } catch (e: any) {
-      if (e?.name === 'CanceledError') return
+    } catch (e: unknown) {
+      if ((e as Error)?.name === 'CanceledError') return
       message.error('加载链路详情失败')
     }
   }

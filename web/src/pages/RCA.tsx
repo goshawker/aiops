@@ -14,7 +14,7 @@ export default function RCA() {
   const [graph, setGraph] = useState<CausalGraph | null>(null)
   const [loading, setLoading] = useState(false)
   const [highlightNode, setHighlightNode] = useState<string | null>(null)
-  const chartRef = useRef<any>(null)
+  const chartRef = useRef<ReactECharts>(null)
 
   const handleAnalyze = async () => {
     const metrics = affectedMetrics
@@ -91,11 +91,11 @@ export default function RCA() {
     return {
       tooltip: {
         trigger: 'item',
-        formatter: (params: any) => {
-          if (params.dataType === 'edge') {
-            return `${params.data.source} → ${params.data.target}<br/>置信度: ${(params.data.value * 100).toFixed(0)}%`
+        formatter: (params: { dataType?: string; data?: { source?: string; target?: string; value?: number }; name?: string }) => {
+          if (params.dataType === 'edge' && params.data) {
+            return `${params.data.source} → ${params.data.target}<br/>置信度: ${((params.data.value || 0) * 100).toFixed(0)}%`
           }
-          return params.name
+          return params.name || ''
         },
       },
       series: [

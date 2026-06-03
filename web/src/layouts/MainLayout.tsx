@@ -258,11 +258,12 @@ function AssistantDrawer({ open, onClose }: { open: boolean; onClose: () => void
       } else {
         reply = `已配置模型: ${modelLabel}\n本地模型文件模式需配合推理服务使用，当前为占位响应。请在「管理 → 模型配置」中切换至 Ollama 或 API 模式。`
       }
-    } catch (e: any) {
-      if (e.name === 'TimeoutError' || e.code === 20) {
+    } catch (e: unknown) {
+      const err = e as { name?: string; code?: number; message?: string }
+      if (err.name === 'TimeoutError' || err.code === 20) {
         reply = `⏱️ 请求超时，请检查 ${modelLabel} 服务是否运行正常`
       } else {
-        reply = `⚠️ 连接 ${modelLabel} 失败: ${e.message || '未知错误'}。请在「管理 → 模型配置」中检查连接设置。`
+        reply = `⚠️ 连接 ${modelLabel} 失败: ${err.message || '未知错误'}。请在「管理 → 模型配置」中检查连接设置。`
       }
     }
 
@@ -476,7 +477,11 @@ export default function MainLayout() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
             <Tooltip title={sidebarCollapsed ? '展开菜单' : '收起菜单'}>
               <span
+                role="button"
+                aria-label="Toggle sidebar"
+                tabIndex={0}
                 onClick={toggleSidebar}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSidebar() }}}
                 style={{ cursor: 'pointer', fontSize: 18, color: isDark ? '#fff' : '#333', marginRight: 8, flexShrink: 0 }}
               >
                 {sidebarCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
@@ -484,13 +489,17 @@ export default function MainLayout() {
             </Tooltip>
 
             {/* Module tabs */}
-            <div style={{ display: 'flex', gap: 4 }}>
+            <div role="tablist" style={{ display: 'flex', gap: 4 }}>
               {moduleTabs.map((tab) => {
                 const active = tab.key === currentModule
                 return (
                   <div
                     key={tab.key}
+                    role="tab"
+                    aria-selected={active}
+                    tabIndex={0}
                     onClick={() => handleModuleTab(tab.key)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleModuleTab(tab.key) }}}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -522,6 +531,7 @@ export default function MainLayout() {
                 type="text"
                 icon={<SearchOutlined />}
                 onClick={() => setSearchVisible(true)}
+                aria-label="Search"
                 style={{ color: isDark ? '#999' : '#666' }}
               />
             </Tooltip>
@@ -548,6 +558,7 @@ export default function MainLayout() {
                 type="text"
                 icon={isDark ? <SunOutlined /> : <MoonOutlined />}
                 onClick={toggleTheme}
+                aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
                 style={{ color: isDark ? '#999' : '#666' }}
               />
             </Tooltip>
@@ -555,13 +566,13 @@ export default function MainLayout() {
             {/* Notification bell */}
             <Tooltip title="通知">
               <Badge count={notificationCount} size="small">
-                <BellOutlined style={{ fontSize: 16, color: isDark ? '#999' : '#666', cursor: 'pointer' }} />
+                <BellOutlined aria-label="Notifications" style={{ fontSize: 16, color: isDark ? '#999' : '#666', cursor: 'pointer' }} />
               </Badge>
             </Tooltip>
 
             {/* User avatar */}
             <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
-              <Space style={{ cursor: 'pointer' }}>
+              <Space style={{ cursor: 'pointer' }} aria-label="User menu">
                 <Avatar size={28} icon={<UserOutlined />} style={{ background: '#1677ff' }} />
                 <span style={{ fontSize: 13, color: isDark ? '#ccc' : '#333' }}>{user?.username || 'admin'}</span>
               </Space>

@@ -21,15 +21,16 @@ export default function Login() {
       setAuth(res.token, { username: res.username, role: res.role, userId: res.user_id, tenantId: res.tenant_id })
       message.success('登录成功')
       navigate('/dashboard')
-    } catch (e: any) {
+    } catch (e: unknown) {
       // Demo mode - auto login when backend unavailable
-      const isNetworkError = !e?.status && !e?.error
+      const err = e as { status?: number; error?: string; message?: string }
+      const isNetworkError = !err?.status && !err?.error
       if (isNetworkError) {
         message.warning('后端不可用，已进入演示模式')
         setAuth('demo-token', { username: values.username, role: 'admin' })
         navigate('/dashboard')
       } else {
-        message.error(e?.error || e?.message || '登录失败，请检查用户名和密码')
+        message.error(err?.error || err?.message || '登录失败，请检查用户名和密码')
       }
     } finally {
       setLoading(false)

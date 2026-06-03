@@ -70,8 +70,9 @@ export default function Alerts() {
       })
       setIncidents(res.data || [])
       setIncidentPagination({ current: page, total: res.total || 0 })
-    } catch (e: any) {
-      message.error(e?.error || '加载事件数据失败')
+    } catch (e: unknown) {
+      const err = e as { error?: string }
+      message.error(err?.error || '加载事件数据失败')
     } finally {
       setLoading(false)
     }
@@ -91,8 +92,9 @@ export default function Alerts() {
       }
       setEvents(data)
       setEventPagination({ current: page, total: res.total || 0 })
-    } catch (e: any) {
-      message.error(e?.error || '加载告警数据失败')
+    } catch (e: unknown) {
+      const err = e as { error?: string }
+      message.error(err?.error || '加载告警数据失败')
     } finally {
       setLoading(false)
     }
@@ -107,8 +109,9 @@ export default function Alerts() {
       })
       setRules(res.data || [])
       setRulePagination({ current: page, total: res.total || 0 })
-    } catch (e: any) {
-      message.error(e?.error || '加载规则数据失败')
+    } catch (e: unknown) {
+      const err = e as { error?: string }
+      message.error(err?.error || '加载规则数据失败')
     } finally {
       setLoading(false)
     }
@@ -183,9 +186,10 @@ export default function Alerts() {
       }
       setRuleModalOpen(false)
       loadData()
-    } catch (e: any) {
-      if (e?.errorFields) return
-      message.error(e?.error || '保存失败')
+    } catch (e: unknown) {
+      const err = e as { errorFields?: unknown; error?: string }
+      if (err?.errorFields) return
+      message.error(err?.error || '保存失败')
     } finally {
       setRuleSaving(false)
     }
@@ -236,7 +240,7 @@ export default function Alerts() {
     { title: '时间', dataIndex: 'created_at', key: 'created_at', width: 170 },
     {
       title: '操作', key: 'action', width: 140,
-      render: (_: any, record: Incident) => (
+      render: (_: unknown, record: Incident) => (
         <Space>
           {record.status === 'open' && (
             <Button size="small" icon={<CheckOutlined />} onClick={() => handleAcknowledge(record.id)}>
@@ -292,7 +296,7 @@ export default function Alerts() {
     { title: '更新时间', dataIndex: 'updated_at', key: 'updated_at', width: 170 },
     {
       title: '操作', key: 'action', width: 120,
-      render: (_: any, record: AlertRule) => (
+      render: (_: unknown, record: AlertRule) => (
         <Space>
           <Button size="small" icon={<EditOutlined />} onClick={() => openEditRule(record)}>
             编辑

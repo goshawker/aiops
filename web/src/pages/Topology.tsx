@@ -46,8 +46,8 @@ export default function Topology() {
     try {
       const res = await topologyApi.graph()
       setGraph(res)
-    } catch (e: any) {
-      if (e?.name === 'CanceledError') return
+    } catch (e: unknown) {
+      if ((e as Error)?.name === 'CanceledError') return
       message.error('加载拓扑数据失败')
     } finally {
       setLoading(false)

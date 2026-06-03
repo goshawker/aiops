@@ -232,9 +232,10 @@ export default function Admin() {
       setAddUserVisible(false)
       addUserForm.resetFields()
       loadUsers()
-    } catch (e: any) {
-      if (e?.errorFields) return // form validation
-      message.error(e?.error || '添加失败')
+    } catch (e: unknown) {
+      const err = e as { errorFields?: unknown; error?: string }
+      if (err?.errorFields) return // form validation
+      message.error(err?.error || '添加失败')
     } finally {
       setAddUserLoading(false)
     }
@@ -267,7 +268,7 @@ export default function Admin() {
     { title: '状态', dataIndex: 'status', key: 'status', width: 80, render: (s: string) => <Tag color={s === 'active' ? 'green' : 'red'}>{s === 'active' ? '正常' : '禁用'}</Tag> },
     {
       title: '操作', key: 'action', width: 140,
-      render: (_: any, record: User) => (
+      render: (_: unknown, record: User) => (
         <Space>
           {record.status === 'active' ? (
             <Popconfirm title="确定禁用该用户？" onConfirm={() => handleDisableUser(record)}>

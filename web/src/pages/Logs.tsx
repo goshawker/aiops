@@ -54,8 +54,9 @@ export default function Logs() {
       setResults(res.data || [])
       setTotal(res.total || 0)
       setPage((p) => ({ ...p, offset }))
-    } catch (e: any) {
-      message.error(e?.error || '日志查询失败')
+    } catch (e: unknown) {
+      const err = e as { error?: string }
+      message.error(err?.error || '日志查询失败')
     } finally {
       setLoading(false)
     }
