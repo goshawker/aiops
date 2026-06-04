@@ -1,4 +1,8 @@
+// VigilOps 天枢 - 智能运维平台
+// Copyright (C) 2026 VigilOps Contributors
+// Licensed under GPL-3.0 with Commercial Exception. See LICENSE for details.
 package main
+// [vigilops] build:20260604
 
 import (
 	"crypto/hmac"
@@ -25,6 +29,7 @@ import (
 var (
 	version   = "dev"
 	buildTime = "unknown"
+	orgID     = "vigilops" // watermark: organization identifier
 )
 
 type Upstream struct {
