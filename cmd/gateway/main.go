@@ -84,7 +84,7 @@ func main() {
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Authorization", "Content-Type", "X-User-ID", "X-Tenant-ID", "X-Role"},
 		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: true,
+		AllowCredentials: false,
 		MaxAge:           12 * time.Hour,
 	}))
 
@@ -297,15 +297,23 @@ func validateToken(token string) (string, string, string, error) {
 		return "", "", "", fmt.Errorf("invalid token signature")
 	}
 
-	// Parse payload: user_id:tenant_id:role:timestamp
+	// Parse payload: support both old (4-field) and new (5-field) formats
 	payloadStr := string(payload)
-	fields := strings.SplitN(payloadStr, ":", 4)
-	if len(fields) != 4 {
+	fields := strings.SplitN(payloadStr, ":", 5)
+
+	var tsStr string
+	if len(fields) == 5 {
+		// New format: user_id:tenant_id:role:token_id:timestamp
+		tsStr = fields[4]
+	} else if len(fields) == 4 {
+		// Old format: user_id:tenant_id:role:timestamp
+		tsStr = fields[3]
+	} else {
 		return "", "", "", fmt.Errorf("invalid token payload")
 	}
 
 	// Check token expiry (24 hours)
-	ts, err := time.Parse(time.RFC3339, fields[3])
+	ts, err := time.Parse(time.RFC3339, tsStr)
 	if err == nil && time.Since(ts) > 24*time.Hour {
 		return "", "", "", fmt.Errorf("token expired")
 	}

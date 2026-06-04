@@ -36,8 +36,8 @@ func (h *AlertHandler) auditLog(c *gin.Context, action, resource, resourceID, de
 	})
 }
 
-func NewAlertHandler(svc *service.AlertService) *AlertHandler {
-	return &AlertHandler{svc: svc}
+func NewAlertHandler(svc *service.AlertService, auditDB *repo.AdminRepo) *AlertHandler {
+	return &AlertHandler{svc: svc, auditDB: auditDB}
 }
 
 // getTenantID extracts tenant_id from gin context (set by auth middleware).

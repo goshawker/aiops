@@ -45,6 +45,7 @@ func main() {
 	// Repositories
 	alertRepo := repo.NewAlertRepo(db)
 	alertRuleRepo := repo.NewAlertRuleRepo(db)
+	adminRepo := repo.NewAdminRepo(db)
 
 	// VictoriaMetrics client (optional — rule evaluation needs it)
 	var vmClient *repo.VMClient
@@ -54,7 +55,7 @@ func main() {
 
 	// Service
 	alertSvc := service.NewAlertService(alertRepo, alertRuleRepo, vmClient)
-	alertHdl := handler.NewAlertHandler(alertSvc)
+	alertHdl := handler.NewAlertHandler(alertSvc, adminRepo)
 
 	// Kafka consumers
 	ctx, cancel := context.WithCancel(context.Background())

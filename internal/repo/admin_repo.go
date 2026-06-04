@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"sync"
 	"time"
 
 	"aiops/internal/model"
@@ -12,7 +13,8 @@ import (
 
 // AdminRepo handles user and audit log persistence.
 type AdminRepo struct {
-	db DBExecutor
+	db        DBExecutor
+	auditLock sync.Mutex // protects InsertAuditLog hash chain
 }
 
 func NewAdminRepo(db DBExecutor) *AdminRepo {
@@ -111,6 +113,9 @@ func (r *AdminRepo) DeleteUser(id int64) error {
 // --- Audit Logs ---
 
 func (r *AdminRepo) InsertAuditLog(log *model.AuditLog) error {
+	r.auditLock.Lock()
+	defer r.auditLock.Unlock()
+
 	// Get the previous record's hash for chain integrity
 	var prevHash string
 	err := r.db.QueryRow("SELECT record_hash FROM audit_logs ORDER BY id DESC LIMIT 1").Scan(&prevHash)

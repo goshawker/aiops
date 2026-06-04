@@ -10,6 +10,7 @@ import (
 
 	"aiops/internal/model"
 	"aiops/internal/repo"
+	"aiops/internal/validator"
 )
 
 // CronScheduler periodically checks enabled jobs and triggers execution
@@ -175,6 +176,12 @@ func (s *CronScheduler) executeJob(job model.Job, exec *model.JobExecution) {
 
 	switch job.JobType {
 	case "shell":
+		// Validate command against dangerous patterns (same as job handler)
+		if err := validator.ValidateShellCommand(job.Content); err != nil {
+			status = "failed"
+			errMsg = err.Error()
+			break
+		}
 		cmd := os_exec.CommandContext(ctx, "sh", "-c", job.Content)
 		out, err := cmd.CombinedOutput()
 		output = string(out)

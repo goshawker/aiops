@@ -50,9 +50,26 @@ func NewAdminHandler(repo *repo.AdminRepo, tenantRepo *repo.TenantRepo) *AdminHa
 		lockoutTime:    15 * time.Minute,
 		tokenBlacklist: make(map[string]time.Time),
 	}
-	// Start background goroutine to clean expired tokens
+	// Start background goroutines for cleanup
 	go h.cleanBlacklist()
+	go h.cleanLoginLocks()
 	return h
+}
+
+// cleanLoginLocks periodically removes expired login lockout entries.
+func (h *AdminHandler) cleanLoginLocks() {
+	ticker := time.NewTicker(15 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		h.mu.Lock()
+		now := time.Now()
+		for name, attempt := range h.loginLocks {
+			if now.Sub(attempt.lastFail) > h.lockoutTime {
+				delete(h.loginLocks, name)
+			}
+		}
+		h.mu.Unlock()
+	}
 }
 
 // cleanBlacklist periodically removes expired tokens from the blacklist.
@@ -523,9 +540,17 @@ func (h *AdminHandler) UpdateUser(c *gin.Context) {
 		user.Email = req.Email
 	}
 	if req.Role != "" {
+		if req.Role != model.RoleAdmin && req.Role != model.RoleOperator && req.Role != model.RoleViewer {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "无效角色"})
+			return
+		}
 		user.Role = req.Role
 	}
 	if req.Status != "" {
+		if req.Status != "active" && req.Status != "disabled" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "无效状态"})
+			return
+		}
 		user.Status = req.Status
 	}
 
