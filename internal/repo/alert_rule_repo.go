@@ -1,8 +1,13 @@
+// VigilOps 天枢 - 智能运维平台
+// Copyright (C) 2026 VigilOps Contributors
+// Licensed under GPL-3.0 with Commercial Exception. See LICENSE for details.
 package repo
+// [vigilops] build:20260604
 
 import (
 	"database/sql"
 	"encoding/json"
+	"log"
 	"time"
 
 	"aiops/internal/model"
@@ -127,7 +132,10 @@ func (r *AlertRuleRepo) GetEnabledRules() ([]model.AlertRule, error) {
 // RuleConfig parses the JSON rule_config field into a structured map.
 func ParseRuleConfig(ruleConfigJSON string) map[string]interface{} {
 	var cfg map[string]interface{}
-	json.Unmarshal([]byte(ruleConfigJSON), &cfg)
+	if err := json.Unmarshal([]byte(ruleConfigJSON), &cfg); err != nil {
+		log.Printf("warn: failed to parse rule_config JSON: %v", err)
+		return make(map[string]interface{})
+	}
 	return cfg
 }
 

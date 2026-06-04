@@ -1,4 +1,8 @@
+// VigilOps 天枢 - 智能运维平台
+// Copyright (C) 2026 VigilOps Contributors
+// Licensed under GPL-3.0 with Commercial Exception. See LICENSE for details.
 package repo
+// [vigilops] build:20260604
 
 import (
 	"database/sql"
@@ -89,7 +93,9 @@ func (r *JobRepo) UpdateJobStatus(id int64, status string) error {
 }
 
 func (r *JobRepo) DeleteJob(id int64) error {
-	r.db.Exec(`DELETE FROM job_executions WHERE job_id=?`, id)
+	if _, err := r.db.Exec(`DELETE FROM job_executions WHERE job_id=?`, id); err != nil {
+		return err
+	}
 	_, err := r.db.Exec(`DELETE FROM jobs WHERE id=?`, id)
 	return err
 }

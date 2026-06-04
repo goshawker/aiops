@@ -1,4 +1,8 @@
+// VigilOps 天枢 - 智能运维平台
+// Copyright (C) 2026 VigilOps Contributors
+// Licensed under GPL-3.0 with Commercial Exception. See LICENSE for details.
 package repo
+// [vigilops] build:20260604
 
 import (
 	"crypto/sha256"
@@ -103,6 +107,11 @@ func (r *AdminRepo) UpdateLastLogin(userID int64) error {
 	now := time.Now()
 	_, err := r.db.Exec(`UPDATE users SET last_login_at=?, updated_at=? WHERE id=?`, now, now, userID)
 	return err
+}
+
+// CountUsersByTenant counts users belonging to a specific tenant.
+func (r *AdminRepo) CountUsersByTenant(tenantID int64, count *int) error {
+	return r.db.QueryRow(`SELECT COUNT(*) FROM users WHERE tenant_id=?`, tenantID).Scan(count)
 }
 
 func (r *AdminRepo) DeleteUser(id int64) error {

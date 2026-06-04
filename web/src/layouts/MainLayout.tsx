@@ -1,3 +1,7 @@
+// [vigilops] build:20260604
+// VigilOps 天枢 - 智能运维平台
+// Copyright (C) 2026 VigilOps Contributors
+// Licensed under GPL-3.0 with Commercial Exception. See LICENSE for details.
 import { useEffect, useMemo, useState } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import {
@@ -367,7 +371,7 @@ export default function MainLayout() {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault()
-        setSearchVisible(!searchVisible)
+        setSearchVisible(!useAppStore.getState().searchVisible)
       }
     }
     window.addEventListener('keydown', handler)

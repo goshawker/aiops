@@ -1,4 +1,8 @@
+// VigilOps 天枢 - 智能运维平台
+// Copyright (C) 2026 VigilOps Contributors
+// Licensed under GPL-3.0 with Commercial Exception. See LICENSE for details.
 package handler
+// [vigilops] build:20260604
 
 import (
 	"crypto/hmac"
@@ -300,14 +304,18 @@ func (h *AdminHandler) Logout(c *gin.Context) {
 	authHeader := c.GetHeader("Authorization")
 	if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
 		tokenStr := authHeader[7:]
-		// Extract token_id from payload
 		parts := strings.SplitN(tokenStr, ":", 2)
 		if len(parts) == 2 {
 			if payload, err := hex.DecodeString(parts[0]); err == nil {
 				fields := strings.SplitN(string(payload), ":", 5)
 				if len(fields) == 5 && fields[3] != "" {
-					// Revoke for 24 hours
+					// New format: revoke by token_id
 					h.revokeToken(fields[3], time.Now().Add(24*time.Hour))
+				} else {
+				// Old format: revoke by full token hash (fallback)
+				sum := sha256.Sum256([]byte(tokenStr))
+				tokenHash := fmt.Sprintf("%x", sum)
+				h.revokeToken(tokenHash, time.Now().Add(24*time.Hour))
 				}
 			}
 		}
@@ -754,6 +762,13 @@ func (h *AdminHandler) DeleteTenant(c *gin.Context) {
 	id := parseInt64Default(c.Param("id"), 0)
 	if id == 1 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "不能删除默认租户"})
+		return
+	}
+	// Check for orphaned users (BUG-23 fix)
+	var userCount int
+	h.repo.CountUsersByTenant(id, &userCount)
+	if userCount > 0 {
+		c.JSON(http.StatusConflict, gin.H{"error": fmt.Sprintf("租户下还有 %d 个用户，请先迁移或删除", userCount)})
 		return
 	}
 	if err := h.tenantRepo.DeleteTenant(id); err != nil {
