@@ -1,0 +1,130 @@
+{{/*
+PodDisruptionBudget for critical services (only when HA enabled)
+*/}}
+{{- if .Values.ha.enabled }}
+
+{{- if .Values.gateway.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "aiops.fullname" . }}-gateway
+  labels:
+    {{- include "aiops.labels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gateway
+      app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+
+---
+{{- if .Values.query.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "aiops.fullname" . }}-query
+  labels:
+    {{- include "aiops.labels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: query
+      app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+
+---
+{{- if .Values.alert.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "aiops.fullname" . }}-alert
+  labels:
+    {{- include "aiops.labels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: alert
+      app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+
+---
+{{- if .Values.admin.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "aiops.fullname" . }}-admin
+  labels:
+    {{- include "aiops.labels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: admin
+      app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+
+---
+{{- if .Values.web.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "aiops.fullname" . }}-web
+  labels:
+    {{- include "aiops.labels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: web
+      app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+
+---
+{{- if .Values.victoriaMetrics.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "aiops.fullname" . }}-victoria-metrics
+  labels:
+    {{- include "aiops.labels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: victoria-metrics
+{{- end }}
+
+---
+{{- if .Values.clickhouse.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "aiops.fullname" . }}-clickhouse
+  labels:
+    {{- include "aiops.labels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: clickhouse
+{{- end }}
+
+---
+{{- if .Values.kafka.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "aiops.fullname" . }}-kafka
+  labels:
+    {{- include "aiops.labels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kafka
+{{- end }}
+
+{{- end }}

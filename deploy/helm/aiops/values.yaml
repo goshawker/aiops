@@ -5,11 +5,26 @@ global:
   imagePullSecrets: []
 
 # ──────────────────────────────────────
+# HA Configuration
+# ──────────────────────────────────────
+ha:
+  enabled: false  # Set to true for production HA deployments
+  # When enabled:
+  # - Gateway: 2 replicas + HPA
+  # - App services: anti-affinity (spread across nodes)
+  # - Storage: 3 replicas (ZK), configurable (VM/CH/Kafka)
+  # - PDB on all services
+  gateway:
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPU: 70
+
+# ──────────────────────────────────────
 # Go Services
 # ──────────────────────────────────────
 gateway:
   enabled: true
-  replicaCount: 1
+  replicaCount: 2
   image:
     repository: aiops/gateway
     tag: latest
@@ -27,7 +42,7 @@ gateway:
 
 query:
   enabled: true
-  replicaCount: 1
+  replicaCount: 2
   image:
     repository: aiops/query
     tag: latest
@@ -37,67 +52,112 @@ query:
     requests:
       cpu: 100m
       memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
 
 alert:
   enabled: true
-  replicaCount: 1
+  replicaCount: 2
   image:
     repository: aiops/alert
     tag: latest
   service:
     port: 8082
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
 
 admin:
   enabled: true
-  replicaCount: 1
+  replicaCount: 2
   image:
     repository: aiops/admin
     tag: latest
   service:
     port: 8083
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
 
 collector:
   enabled: true
-  replicaCount: 1
+  replicaCount: 2
   image:
     repository: aiops/collector
     tag: latest
   service:
     port: 8084
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
 
 job:
   enabled: true
-  replicaCount: 1
+  replicaCount: 1  # Single replica (cron jobs should not run in parallel)
   image:
     repository: aiops/job
     tag: latest
   service:
     port: 8085
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
 
 # ──────────────────────────────────────
 # Python AI Services
 # ──────────────────────────────────────
 anomaly:
   enabled: true
-  replicaCount: 1
+  replicaCount: 2
   image:
     repository: aiops/anomaly
     tag: latest
   service:
     port: 5001
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
 
 alertAgg:
   enabled: true
-  replicaCount: 1
+  replicaCount: 2
   image:
     repository: aiops/alert-agg
     tag: latest
   service:
     port: 5003
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
 
 llm:
   enabled: true
-  replicaCount: 1
+  replicaCount: 1  # Single replica (GPU-bound model inference)
   image:
     repository: aiops/llm
     tag: latest
@@ -107,6 +167,9 @@ llm:
     requests:
       cpu: 500m
       memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
 
 rca:
   enabled: true
@@ -116,56 +179,103 @@ rca:
     tag: latest
   service:
     port: 5005
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
 
 # ──────────────────────────────────────
 # Frontend
 # ──────────────────────────────────────
 web:
   enabled: true
-  replicaCount: 1
+  replicaCount: 2
   image:
     repository: aiops/web
     tag: latest
   service:
     type: ClusterIP
     port: 80
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
 
 # ──────────────────────────────────────
 # Storage
 # ──────────────────────────────────────
 victoriaMetrics:
   enabled: true
+  replicas: 1  # Increase for HA (requires shared storage or vminsert/vmselect)
   image:
     repository: victoriametrics/victoria-metrics
     tag: v1.106.1
   storage: 10Gi
+  retentionPeriod: "30d"
   service:
     port: 8428
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
 
 clickhouse:
   enabled: true
+  replicas: 1  # Increase for HA (requires ClickHouse Keeper for replication)
   image:
     repository: clickhouse/clickhouse-server
     tag: "24.10"
   storage: 20Gi
   service:
     port: 8123
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
 
 kafka:
   enabled: true
+  replicas: 1  # Set to 3 for production (requires ZooKeeper ensemble)
   image:
     repository: bitnami/kafka
     tag: "3.8"
   storage: 10Gi
   service:
     port: 9092
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
 
 zookeeper:
   enabled: true
+  replicas: 1  # Set to 3 for production (ZooKeeper ensemble)
   image:
     repository: bitnami/zookeeper
     tag: "3.9"
   storage: 5Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
 
 nebula:
   enabled: false
@@ -205,3 +315,4 @@ config:
     brokers: "kafka:9092"
   sqlite:
     path: "/data/aiops.db"
+  jwtSecret: ""  # Set via --set config.jwtSecret=xxx or K8s Secret
