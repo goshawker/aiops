@@ -149,6 +149,26 @@ backup-list:
 backup-restore:
 	@bash deploy/backup/restore.sh --$(TYPE) $(FILE)
 
+## healthcheck: check all service health
+healthcheck:
+	@bash deploy/dr/healthcheck.sh
+
+## healthcheck-fix: check and auto-fix unhealthy services
+healthcheck-fix:
+	@bash deploy/dr/healthcheck.sh --fix
+
+## healthcheck-watch: continuous health monitoring (usage: make healthcheck-watch SEC=30)
+healthcheck-watch:
+	@bash deploy/dr/healthcheck.sh --watch $(SEC)
+
+## docker-ha: start with health checks (HA mode)
+docker-ha:
+	@docker compose -f deploy/docker-compose/docker-compose.yml -f deploy/dr/docker-compose.ha.yml up -d
+
+## replicate: replicate backups to standby node (usage: make replicate TO=user@host)
+replicate:
+	@bash deploy/dr/replicate.sh --to $(TO)
+
 ## docker-logs: show service logs
 docker-logs:
 	@docker compose -f deploy/docker-compose/docker-compose.yml logs -f
