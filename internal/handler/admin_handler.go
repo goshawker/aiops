@@ -184,9 +184,10 @@ func (h *AdminHandler) AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// Priority 2: Trust X-User-ID only from internal Gateway (X-Forwarded-For present)
-		// This is the path for requests that came through the Gateway proxy
-		if c.GetHeader("X-Forwarded-For") != "" || c.GetHeader("X-Real-IP") != "" {
+		// Priority 2: Trust X-User-ID only from Gateway with valid shared secret (BUG-02 fix)
+		// X-Forwarded-For/X-Real-IP can be spoofed, so we require the gateway secret
+		gatewaySecret := os.Getenv("GATEWAY_SECRET")
+		if gatewaySecret != "" && c.GetHeader("X-Gateway-Secret") == gatewaySecret {
 			userIDStr := c.GetHeader("X-User-ID")
 			if userIDStr == "" {
 				c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
@@ -542,6 +543,12 @@ func (h *AdminHandler) UpdateUser(c *gin.Context) {
 	if req.Role != "" {
 		if req.Role != model.RoleAdmin && req.Role != model.RoleOperator && req.Role != model.RoleViewer {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "无效角色"})
+			return
+		}
+		// Prevent self-role modification (BUG-22)
+		currentUserID, _ := c.Get("user_id")
+		if currentUserID != nil && currentUserID.(int64) == id {
+			c.JSON(http.StatusForbidden, gin.H{"error": "不能修改自己的角色"})
 			return
 		}
 		user.Role = req.Role

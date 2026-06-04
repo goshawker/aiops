@@ -67,7 +67,7 @@ func (h *JobHandler) CreateJob(c *gin.Context) {
 		Enabled:    true,
 		Timeout:    req.Timeout,
 		RetryCount: req.RetryCount,
-		TenantID:   1,
+		TenantID:   getTenantID(c),
 	}
 
 	if err := h.repo.CreateJob(job); err != nil {
@@ -172,7 +172,10 @@ func (h *JobHandler) RunJob(c *gin.Context) {
 		Status:    "running",
 		StartedAt: time.Now(),
 	}
-	h.repo.CreateExecution(exec)
+	if err := h.repo.CreateExecution(exec); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建执行记录失败"})
+		return
+	}
 	h.repo.UpdateJobStatus(job.ID, "running")
 
 	// Execute asynchronously

@@ -57,6 +57,9 @@ var jwtSecret = func() string {
 	return s
 }()
 
+// gatewaySecret is shared with backend services to verify requests came through the gateway.
+var gatewaySecret = os.Getenv("GATEWAY_SECRET")
+
 // noAuthPaths are paths that don't require authentication.
 var noAuthPaths = map[string]bool{
 	"/health":              true,
@@ -202,18 +205,24 @@ func proxy(upstream string) gin.HandlerFunc {
 		}
 	}
 
+	// Create proxy once, reuse across requests (BUG-13 fix)
+	p := httputil.NewSingleHostReverseProxy(remote)
+	p.Director = func(req *http.Request) {
+		req.Host = remote.Host
+		req.URL.Scheme = remote.Scheme
+		req.URL.Host = remote.Host
+		// Inject gateway secret for backend verification (BUG-02 fix)
+		if gatewaySecret != "" {
+			req.Header.Set("X-Gateway-Secret", gatewaySecret)
+		}
+	}
+	p.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadGateway)
+		json.NewEncoder(w).Encode(gin.H{"error": upstream + " unavailable", "detail": err.Error()})
+	}
+
 	return func(c *gin.Context) {
-		p := httputil.NewSingleHostReverseProxy(remote)
-		p.Director = func(req *http.Request) {
-			req.Host = remote.Host
-			req.URL.Scheme = remote.Scheme
-			req.URL.Host = remote.Host
-		}
-		p.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadGateway)
-			json.NewEncoder(w).Encode(gin.H{"error": upstream + " unavailable", "detail": err.Error()})
-		}
 		p.ServeHTTP(c.Writer, c.Request)
 	}
 }

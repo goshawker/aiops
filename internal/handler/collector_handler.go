@@ -41,7 +41,7 @@ func (h *CollectorHandler) RegisterCollector(c *gin.Context) {
 		IP:       req.IP,
 		Version:  req.Version,
 		Tags:     req.Tags,
-		TenantID: 1,
+		TenantID: getTenantID(c),
 	}
 
 	if err := h.repo.RegisterCollector(collector); err != nil {
@@ -279,6 +279,12 @@ func (h *CollectorHandler) ServeInstallScript(c *gin.Context) {
 	if agentDir == "" {
 		agentDir = "deploy/agent"
 	}
-	c.File(fmt.Sprintf("%s/install.sh", agentDir))
+	filePath := filepath.Join(agentDir, "install.sh")
+	cleanPath := filepath.Clean(filePath)
+	if !strings.HasPrefix(cleanPath, filepath.Clean(agentDir)) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "访问被拒绝"})
+		return
+	}
+	c.File(cleanPath)
 }
 
