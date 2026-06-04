@@ -121,7 +121,7 @@ export default function Alerts() {
     if (tab === 'incidents') loadIncidents(1)
     else if (tab === 'events') loadEvents(1)
     else if (tab === 'rules') loadRules(1)
-  }, [tab, statusFilter])
+  }, [tab, statusFilter, severityFilter])
 
   // Reload current page
   const loadData = () => {

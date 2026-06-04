@@ -108,9 +108,10 @@ function renderHighlighted(text: string, _level: string, highlight?: string): Re
 
   const regex = new RegExp(`(${escapeRegex(highlight)})`, 'gi')
   const parts = text.split(regex)
+  const lowerHighlight = highlight.toLowerCase()
 
   return parts.map((part, i) =>
-    regex.test(part) ? (
+    part.toLowerCase().includes(lowerHighlight) ? (
       <mark key={i} style={{ background: '#ffeb3b', padding: '0 2px', borderRadius: 2 }}>
         {part}
       </mark>

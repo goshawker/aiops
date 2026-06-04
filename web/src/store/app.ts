@@ -82,15 +82,22 @@ export const useAppStore = create<AppState>((set, get) => ({
   setAssistantVisible: (visible) => set({ assistantVisible: visible }),
 
   token: localStorage.getItem('token'),
-  user: null,
+  user: (() => {
+    try {
+      const stored = localStorage.getItem('user')
+      return stored ? JSON.parse(stored) : null
+    } catch { return null }
+  })(),
   setAuth: (token, user) => {
     localStorage.setItem('token', token)
+    localStorage.setItem('user', JSON.stringify(user))
     set({ token, user, lastActivity: Date.now() })
-    // Start idle monitoring after login
     startIdleMonitor(get, set)
   },
   logout: () => {
+    if (cleanupIdle) cleanupIdle()
     localStorage.removeItem('token')
+    localStorage.removeItem('user')
     set({ token: null, user: null })
   },
 
@@ -101,12 +108,12 @@ export const useAppStore = create<AppState>((set, get) => ({
 
 // Idle timeout monitor
 let idleTimer: ReturnType<typeof setTimeout> | null = null
+let cleanupIdle: (() => void) | null = null
 
 function startIdleMonitor(get: () => AppState, set: (partial: Partial<AppState>) => void) {
-  // Clear existing timer
-  if (idleTimer) {
-    clearTimeout(idleTimer)
-  }
+  // Clean up previous listeners
+  if (cleanupIdle) cleanupIdle()
+  if (idleTimer) clearTimeout(idleTimer)
 
   // Reset activity on user interaction
   const resetActivity = () => {
@@ -117,28 +124,36 @@ function startIdleMonitor(get: () => AppState, set: (partial: Partial<AppState>)
   }
 
   // Add event listeners for user activity
-  const events = ['mousedown', 'keydown', 'scroll', 'touchstart']
+  const events = ['mousedown', 'keydown', 'scroll', 'touchstart'] as const
   events.forEach((event) => {
     window.addEventListener(event, resetActivity, { passive: true })
   })
+
+  // Store cleanup function
+  cleanupIdle = () => {
+    events.forEach((event) => {
+      window.removeEventListener(event, resetActivity)
+    })
+    if (idleTimer) {
+      clearTimeout(idleTimer)
+      idleTimer = null
+    }
+  }
 
   // Check idle timeout every minute
   const checkIdle = () => {
     const state = get()
     if (!state.token) {
-      // Not logged in, stop monitoring
-      if (idleTimer) clearTimeout(idleTimer)
+      if (cleanupIdle) cleanupIdle()
       return
     }
 
     const idleTime = Date.now() - state.lastActivity
     if (idleTime >= IDLE_TIMEOUT) {
-      // Auto logout
       state.logout()
       return
     }
 
-    // Schedule next check
     idleTimer = setTimeout(checkIdle, 60000)
   }
 

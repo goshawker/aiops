@@ -95,8 +95,8 @@ export default function Anomaly() {
   }
 
   const handleFeedback = (id: number, feedback: string) => {
-    setEvents(events.map(e => e.id === id ? { ...e, feedback, status: 'dismissed' } : e))
-    message.success(feedback === 'false_positive' ? '已标记为误报，将用于模型优化' : '已确认')
+    setEvents(prev => prev.map(e => e.id === id ? { ...e, feedback, status: 'dismissed' } : e))
+    message.success(feedback === 'false_positive' ? '已标记为误报' : '已确认')
   }
 
   const openCount = events.filter(e => e.status === 'open').length

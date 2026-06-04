@@ -74,7 +74,9 @@ export default function Dashboard() {
         const info = Array(24).fill(0)
 
         events.forEach((e) => {
-          const h = new Date(e.fired_at).getHours()
+          const date = new Date(e.fired_at)
+          if (isNaN(date.getTime())) return
+          const h = date.getHours()
           if (e.severity === 'critical') critical[h]++
           else if (e.severity === 'warning') warning[h]++
           else info[h]++
@@ -150,10 +152,10 @@ export default function Dashboard() {
       label: { show: false },
       emphasis: { label: { show: true, fontSize: 13, fontWeight: 'bold' } },
       data: [
-        { value: Math.max(incidents.filter((i) => i.severity === 'critical').length, 1), name: '严重', itemStyle: { color: '#ff4d4f' } },
-        { value: Math.max(incidents.filter((i) => i.severity === 'warning').length, 2), name: '警告', itemStyle: { color: '#faad14' } },
-        { value: Math.max(incidents.filter((i) => i.severity === 'info').length, 3), name: '信息', itemStyle: { color: '#1677ff' } },
-      ],
+        { value: incidents.filter((i) => i.severity === 'critical').length || 0, name: '严重', itemStyle: { color: '#ff4d4f' } },
+        { value: incidents.filter((i) => i.severity === 'warning').length || 0, name: '警告', itemStyle: { color: '#faad14' } },
+        { value: incidents.filter((i) => i.severity === 'info').length || 0, name: '信息', itemStyle: { color: '#1677ff' } },
+      ].filter(d => d.value > 0),
     }],
   }
 

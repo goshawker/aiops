@@ -185,7 +185,7 @@ export default function Logs() {
         <Table
           dataSource={results}
           columns={columns}
-          rowKey={(r) => `${r.timestamp}-${r.host}-${r.message?.substring(0, 20)}`}
+          rowKey={(r, i) => `${r.timestamp}-${r.host}-${r.message?.substring(0, 20)}-${i}`}
           loading={loading}
           size="small"
           virtual
