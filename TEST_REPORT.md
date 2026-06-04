@@ -1,7 +1,7 @@
 # VigilOps 天枢 测试报告
 
 **生成时间**: 2026-06-04
-**测试范围**: 前端 (React/TS) + Go 后端 + Python AI 服务
+**测试范围**: 前端 (React/TS) + Go 后端 (Handler/Repo/Service) + Python AI 服务
 
 ---
 
@@ -10,9 +10,11 @@
 | 层 | 测试文件数 | 用例数 | 通过 | 失败 | 通过率 | 耗时 |
 |----|-----------|--------|------|------|--------|------|
 | **Frontend (vitest)** | 8 | 47 | 47 | 0 | 100% | 0.7s |
-| **Go (go test)** | 1 | 12 | 12 | 0 | 100% | 0.4s |
+| **Go Handler** | 5 | 34 | 34 | 0 | 100% | 3.1s |
+| **Go Repo** | 6 | 44 | 44 | 0 | 100% | 0.5s |
+| **Go Service** | 1 | 12 | 12 | 0 | 100% | 0.4s |
 | **Python (pytest)** | 3 | 38 | 38 | 0 | 100% | 0.4s |
-| **合计** | **12** | **97** | **97** | **0** | **100%** | **1.5s** |
+| **合计** | **23** | **175** | **175** | **0** | **100%** | **5.1s** |
 
 ---
 
@@ -36,23 +38,53 @@
 |------|--------|------|
 | `store/__tests__/app.test.ts` | 6 | ✅ 全部通过 |
 
-### 测试覆盖内容
-- API 模块: 验证每个 API 方法调用正确的 HTTP 方法、路径和参数
-- Store: 初始状态、主题切换、侧边栏折叠、认证/token 持久化、登出清理、空闲超时
-
 ---
 
-## Go 测试详情 (12 tests)
+## Go Handler 测试详情 (34 tests)
 
 | 文件 | 用例数 | 状态 |
 |------|--------|------|
-| `internal/service/cron_scheduler_test.go` | 12 | ✅ 全部通过 |
+| `handler/admin_handler_test.go` | 16 | ✅ 全部通过 |
+| `handler/alert_handler_test.go` | 10 | ✅ 全部通过 |
+| `handler/job_handler_test.go` | 8 | ✅ 全部通过 |
+| `handler/collector_handler_test.go` | 8 | ✅ 全部通过 |
+
+### 测试覆盖内容
+- Admin: 登录成功/失败/锁定/禁用、用户 CRUD、角色验证、自我提权防护、租户管理、Token 生成验证
+- Alert: 规则 CRUD、事件/事件列表、确认/解决事件
+- Job: 作业 CRUD、执行、危险命令验证、执行历史
+- Collector: 注册/列表/删除/心跳/状态/下载验证
+
+---
+
+## Go Repo 测试详情 (44 tests)
+
+| 文件 | 用例数 | 状态 |
+|------|--------|------|
+| `repo/admin_repo_test.go` | 12 | ✅ 全部通过 |
+| `repo/alert_rule_repo_test.go` | 10 | ✅ 全部通过 |
+| `repo/tenant_repo_test.go` | 7 | ✅ 全部通过 |
+| `repo/collector_repo_test.go` | 8 | ✅ 全部通过 |
+| `repo/job_repo_test.go` | 7 | ✅ 全部通过 |
+
+### 测试覆盖内容
+- SQLite 内存数据库 + 完整 schema 初始化
+- CRUD 操作、唯一约束、分页、状态过滤
+- 哈希链完整性 (审计日志)
+- 命令验证 (validator 包)
+
+---
+
+## Go Service 测试详情 (12 tests)
+
+| 文件 | 用例数 | 状态 |
+|------|--------|------|
+| `service/cron_scheduler_test.go` | 12 | ✅ 全部通过 |
 
 ### 测试覆盖内容
 - Cron 表达式解析: `@hourly`, `@daily`, `@weekly` 别名
 - 标准 5 字段 cron: `*/5 * * * *`, `0 9 * * 1-5`
 - `matchCronField`: 通配符、步进、范围、列表、精确值、无效输入
-- 边界条件: 无效表达式、字段数不匹配
 
 ---
 
@@ -64,50 +96,10 @@
 | `llm/test_summary_engine.py` | 13 | ✅ 全部通过 |
 | `rca/test_engine.py` | 12 | ✅ 全部通过 |
 
-### Anomaly Detector (13 tests)
-- 无数据/warmup 返回 None
-- 尖峰/下降异常检测
-- 静态阈值 (>, <) 优先级
-- 严重程度分级 (critical/warning/info)
-- 标签一致性、窗口大小
-
-### LLM Summary Engine (13 tests)
-- 正常指标 → normal 状态
-- CPU > 80 → warning
-- 内存 > 95 → critical
-- 磁盘 > 90 → warning + 建议
-- 错误率 > 5 → critical
-- 日志错误数判断
-- 事件升级逻辑
-- 状态只升不降
-
-### RCA Engine (12 tests)
-- 时间序列添加/合并
-- 因果图发现（指标不足/数据不足）
-- 相关性发现（强相关/弱相关）
-- 滞后估计
-- 根因分析（有图/无图）
-- 图结构输出
-
----
-
-## 缺陷修复验证 (45 bugs fixed)
-
-| 严重程度 | 前端 | 后端 | 总计 | 状态 |
-|---------|------|------|------|------|
-| Critical | 2 | 4 | 6 | ✅ 全部修复 |
-| High | 6 | 7 | 13 | ✅ 全部修复 |
-| Medium | 7 | 9 | 16 | ✅ 全部修复 |
-| Low | 4 | 6 | 10 | ✅ 全部修复 |
-| **合计** | **19** | **26** | **45** | **✅ 100%** |
-
----
-
-## 安全审计
-
-- 等保三级: 25/25 全部修复 (100% 代码合规)
-- 代码水印: 100+ 文件注入 `[vigilops] build:` 标识
-- 许可证头: 108 个文件 GPL-3.0 头
+### 测试覆盖内容
+- Anomaly: 3-sigma 检测、静态阈值、严重程度分级、标签一致性
+- LLM: 健康摘要生成、状态升级逻辑、空数据处理
+- RCA: 因果图发现、根因分析、相关性计算
 
 ---
 
@@ -119,8 +111,8 @@
 - **运行**: `cd web && npm test`
 
 ### Go
-- **框架**: 标准库 testing + testify
-- **运行**: `go test ./internal/... -v`
+- **框架**: 标准库 testing + testify + SQLite 内存数据库
+- **运行**: `JWT_SECRET=test-secret go test ./internal/... -v`
 
 ### Python
 - **框架**: pytest
