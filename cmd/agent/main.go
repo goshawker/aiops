@@ -69,7 +69,7 @@ func main() {
 		MetricsPort:  *metricsPort,
 	}
 
-	log.Printf("AIOps Agent %s starting (name=%s, collector=%s, interval=%s, metrics=:%d)",
+	log.Printf("VigilOps Agent %s starting (name=%s, collector=%s, interval=%s, metrics=:%d)",
 		version, cfg.AgentName, cfg.CollectorURL, cfg.Interval, cfg.MetricsPort)
 
 	// Register with collector

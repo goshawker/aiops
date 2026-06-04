@@ -1,4 +1,4 @@
-# AIOps 平台安装部署指南
+# VigilOps 天枢 平台安装部署指南
 
 **版本**: 1.0.0
 **更新日期**: 2026-06-03
@@ -251,15 +251,15 @@ notification:
 
 ## 5. Agent 安装部署
 
-Agent 部署在远程主机上，负责采集指标并上报到 AIOps 平台。
+Agent 部署在远程主机上，负责采集指标并上报到 VigilOps 平台。
 
 ### 5.1 在线安装（推荐）
 
 **一键安装命令**（在目标主机上执行）：
 
 ```bash
-curl -sSL http://<AIOps服务器IP>:3000/install.sh | bash -s -- \
-  --collector http://<AIOps服务器IP>:8084 \
+curl -sSL http://<VigilOps服务器IP>:3000/install.sh | bash -s -- \
+  --collector http://<VigilOps服务器IP>:8084 \
   --name "web-server-01" \
   --tags '{"env":"production","region":"cn-east"}'
 ```
@@ -311,7 +311,7 @@ scp deploy/agent/install.sh bin/agent-linux-amd64 user@target-host:/tmp/
 ```bash
 bash /tmp/install.sh \
   --local-bin /tmp/agent-linux-amd64 \
-  --collector http://<AIOps服务器IP>:8084 \
+  --collector http://<VigilOps服务器IP>:8084 \
   --name "offline-server-01"
 ```
 
@@ -332,7 +332,7 @@ make deploy-agent HOST=user@host2 COLLECTOR=http://aiops-server:8084
 - hosts: target_hosts
   become: yes
   tasks:
-    - name: Install AIOps Agent
+    - name: Install VigilOps Agent
       shell: |
         curl -sSL http://{{ aiops_server }}:3000/install.sh | bash -s -- \
           --collector http://{{ aiops_server }}:8084 \
@@ -559,7 +559,7 @@ docker exec clickhouse clickhouse-client --query "BACKUP DATABASE aiops TO Disk(
 
 ### 9.3 监控
 
-AIOps 自身指标暴露在各服务的 `/metrics` 端点：
+VigilOps 自身指标暴露在各服务的 `/metrics` 端点：
 
 ```bash
 # 查看 Gateway 指标
@@ -579,7 +579,7 @@ docker compose logs -f --tail=100 gateway
 # 按服务过滤
 docker compose logs alert --since 1h
 
-# 在 AIOps 前端查看
+# 在 VigilOps 前端查看
 # 访问 http://localhost:3000 → 可观测性 → 日志
 ```
 
@@ -606,7 +606,7 @@ docker compose logs <service-name> --tail=50
 journalctl -u aiops-agent -f
 
 # 检查网络连通性
-curl http://<AIOps服务器>:8084/api/v1/health
+curl http://<VigilOps服务器>:8084/api/v1/health
 
 # 检查防火墙
 # 需要开放: 8084 (collector), 3000 (agent下载)

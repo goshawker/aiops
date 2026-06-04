@@ -33,9 +33,9 @@ const moduleGroups: Record<string, { label: string; icon: React.ReactNode }> = {
   logs: { label: '可观测性', icon: <FileTextOutlined /> },
   traces: { label: '可观测性', icon: <BranchesOutlined /> },
   topology: { label: '可观测性', icon: <ClusterOutlined /> },
-  anomaly: { label: 'AIOps', icon: <BugOutlined /> },
-  rca: { label: 'AIOps', icon: <ApartmentOutlined /> },
-  alerts: { label: 'AIOps', icon: <AlertOutlined /> },
+  anomaly: { label: 'VigilOps', icon: <BugOutlined /> },
+  rca: { label: 'VigilOps', icon: <ApartmentOutlined /> },
+  alerts: { label: 'VigilOps', icon: <AlertOutlined /> },
   jobs: { label: '自动化', icon: <ClockCircleOutlined /> },
   admin: { label: '管理', icon: <SettingOutlined /> },
 }

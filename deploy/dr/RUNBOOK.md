@@ -1,4 +1,4 @@
-# AIOps 灾备运维手册
+# VigilOps 天枢 灾备运维手册
 
 ## RTO/RPO 目标
 
@@ -16,7 +16,7 @@
 
 ```
 [主节点]  ──rsync/ssh──>  [备份节点]
-  AIOps 全栈               备份存储 + 冷备
+  VigilOps 全栈             备份存储 + 冷备
 ```
 
 - 每天自动备份 (backup.sh)
@@ -66,7 +66,7 @@ docker compose -f deploy/docker-compose/docker-compose.yml restart <service>
 ### 场景 2: 主机故障 (单节点)
 
 ```bash
-# 1. 在备份节点安装 AIOps
+# 1. 在备份节点安装 VigilOps
 git clone https://github.com/goshawker/aiops.git
 cd aiops
 make web-build && make docker-build

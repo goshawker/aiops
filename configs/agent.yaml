@@ -1,4 +1,4 @@
-# AIOps Host Agent Configuration
+# VigilOps Host Agent Configuration
 collector_url: "http://localhost:8084"
 agent_name: "${HOSTNAME}"
 interval: 30s

@@ -1,5 +1,5 @@
 #!/bin/bash
-# AIOps Platform - Backup Restore Script
+# VigilOps - Backup Restore Script
 #
 # Usage:
 #   bash deploy/backup/restore.sh --sqlite /path/to/backup.db
@@ -12,7 +12,7 @@ set -euo pipefail
 BACKUP_DIR="${BACKUP_DIR:-/opt/aiops/backups}"
 
 echo "========================================"
-echo " AIOps Restore - $(date)"
+echo " VigilOps Restore - $(date)"
 echo "========================================"
 
 # ── List backups ───────────────────────────────────────

@@ -1,4 +1,4 @@
-AIOps Platform - Dual License
+VigilOps - Dual License
 
 This project is dual-licensed under the terms of the GNU General Public
 License v3.0 (GPL-3.0) and a Commercial License Exception, as described below.
@@ -24,7 +24,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 LICENSE OPTION 2: COMMERCIAL LICENSE EXCEPTION
 ========================================================================
 
-The AIOps Platform grants the following Commercial License Exception
+The VigilOps Platform grants the following Commercial License Exception
 ("Exception") to the GPL-3.0 license terms above. This Exception allows
 you to use, modify, and distribute the Software in proprietary or
 commercial products WITHOUT being subject to the copyleft requirements
@@ -32,7 +32,7 @@ of the GPL-3.0, subject to the following conditions:
 
 1. DEFINITIONS
 
-   "Software" means the AIOps Platform source code and all associated
+   "Software" means the VigilOps Platform source code and all associated
    files, including but not limited to source code, documentation,
    configuration files, and build scripts.
 
@@ -53,10 +53,10 @@ of the GPL-3.0, subject to the following conditions:
    b) Modify the Software and create derivative works.
    c) Distribute the Software as part of a larger proprietary product,
       provided that:
-      i.   The core AIOps Platform source code modifications are NOT
+      i.   The core VigilOps Platform source code modifications are NOT
            required to be open-sourced under this Exception.
       ii.  You retain this license notice in all copies.
-      iii. You do not use the AIOps Platform name, logo, or trademarks
+      iii. You do not use the VigilOps Platform name, logo, or trademarks
            without written permission.
 
 3. COMMERCIAL USE REQUIREMENTS
@@ -166,8 +166,8 @@ modification follow.
 NOTICE
 ========================================================================
 
-AIOps Platform
-Copyright (C) 2026 AIOps Contributors
+VigilOps 天枢
+Copyright (C) 2026 VigilOps Contributors
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by

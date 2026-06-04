@@ -1,5 +1,5 @@
 #!/bin/bash
-# AIOps Platform - Automated Backup Script
+# VigilOps - Automated Backup Script
 # Backs up: SQLite, ClickHouse, VictoriaMetrics
 #
 # Usage:
@@ -38,7 +38,7 @@ for arg in "$@"; do
 done
 
 echo "========================================"
-echo " AIOps Backup - $(date)"
+echo " VigilOps Backup - $(date)"
 echo " Backup dir: $BACKUP_DIR"
 echo " Retention:  ${RETENTION_DAYS} days"
 echo "========================================"

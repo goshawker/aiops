@@ -107,7 +107,7 @@ export default function Login() {
         {/* Footer info */}
         <div style={{ textAlign: 'center', marginTop: 32 }}>
           <Text type="secondary" style={{ fontSize: 12 }}>
-            AIOps v1.0 · 智能运维平台
+            VigilOps 天枢 v1.0 · 智能运维平台
           </Text>
         </div>
       </Card>

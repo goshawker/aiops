@@ -1,5 +1,5 @@
 #!/bin/bash
-# AIOps Platform - Health Check & Auto-Failover Script
+# VigilOps - Health Check & Auto-Failover Script
 #
 # Monitors all services and performs automatic recovery actions.
 # Usage:
@@ -85,7 +85,7 @@ send_alert() {
   if [ -n "$ALERT_WEBHOOK" ]; then
     curl -s -X POST "$ALERT_WEBHOOK" \
       -H "Content-Type: application/json" \
-      -d "{\"text\": \"[AIOps DR] $message\"}" \
+      -d "{\"text\": \"[VigilOps DR] $message\"}" \
       --max-time 5 2>/dev/null || true
   fi
 }
@@ -97,7 +97,7 @@ run_checks() {
   local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
 
   echo "========================================"
-  echo " AIOps Health Check - $timestamp"
+  echo " VigilOps Health Check - $timestamp"
   echo "========================================"
 
   # Storage Layer

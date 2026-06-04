@@ -1,5 +1,5 @@
 #!/bin/bash
-# AIOps TLS Certificate Setup
+# VigilOps TLS Certificate Setup
 # Supports: Let's Encrypt (domain) / Self-signed (IP-only)
 #
 # Usage:
@@ -29,7 +29,7 @@ done
 mkdir -p "$CERT_DIR"
 
 echo "========================================"
-echo " AIOps TLS Certificate Setup"
+echo " VigilOps TLS Certificate Setup"
 echo "========================================"
 
 # ── Option 1: Let's Encrypt (with domain) ──────────────

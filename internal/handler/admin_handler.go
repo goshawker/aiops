@@ -379,7 +379,7 @@ func (h *AdminHandler) EnableMFA(c *gin.Context) {
 
 	// Generate TOTP key
 	key, err := totp.Generate(totp.GenerateOpts{
-		Issuer:      "AIOps",
+		Issuer:      "VigilOps",
 		AccountName: user.Username,
 	})
 	if err != nil {

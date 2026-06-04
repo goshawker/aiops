@@ -1,5 +1,5 @@
 #!/bin/bash
-# AIOps Platform - Cross-Node Data Replication
+# VigilOps - Cross-Node Data Replication
 #
 # Replicates backups from primary node to standby node.
 # Usage:
@@ -24,13 +24,13 @@ done
 if [ -z "$TARGET" ]; then
   echo "Usage: replicate.sh --to user@host [--dry-run]"
   echo ""
-  echo "This script replicates AIOps backups to a standby node."
-  echo "The standby node should have AIOps installed but stopped."
+  echo "This script replicates VigilOps backups to a standby node."
+  echo "The standby node should have VigilOps installed but stopped."
   exit 1
 fi
 
 echo "========================================"
-echo " AIOps Data Replication"
+echo " VigilOps Data Replication"
 echo " From: $(hostname)"
 echo " To:   $TARGET"
 echo " Time: $(date)"

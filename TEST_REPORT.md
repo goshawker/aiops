@@ -1,4 +1,4 @@
-# AIOps 测试报告
+# VigilOps 天枢 测试报告
 
 **生成时间**: 2026-06-03
 **测试范围**: 前端 (React/TS) + Go 后端 + Python AI 服务

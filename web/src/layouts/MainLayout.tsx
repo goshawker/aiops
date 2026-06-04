@@ -62,7 +62,7 @@ const moduleGroups: ModuleGroup[] = [
   },
   {
     key: 'aiops',
-    label: 'AIOps',
+    label: 'VigilOps',
     icon: <BugOutlined />,
     children: [
       { key: '/anomaly', icon: <BugOutlined />, label: '异常检测' },
@@ -308,7 +308,7 @@ function AssistantDrawer({ open, onClose }: { open: boolean; onClose: () => void
           }}
         >
           <MessageOutlined style={{ fontSize: 48, opacity: 0.3 }} />
-          <Text type="secondary">你好！我是 AIOps 智能助手</Text>
+          <Text type="secondary">你好！我是 VigilOps 天枢智能助手</Text>
           <Text type="secondary" style={{ fontSize: 12 }}>
             我可以帮你查询指标、分析日志、排查故障
           </Text>
@@ -450,7 +450,7 @@ export default function MainLayout() {
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <FundOutlined style={{ fontSize: 22, color: '#1677ff' }} />
-            {!sidebarCollapsed && <span>AIOps</span>}
+            {!sidebarCollapsed && <span>VigilOps 天枢</span>}
           </div>
         </div>
 
