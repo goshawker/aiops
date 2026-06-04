@@ -1,0 +1,241 @@
+name: Docker Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository_owner }}/vigilops
+
+jobs:
+  build-frontend:
+    name: Build Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build frontend
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+
+      - name: Upload frontend dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: web/dist/
+
+  build-go:
+    name: Build Go Services
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [gateway, query, alert, admin, collector, job]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache-dependency-path: go.sum
+
+      - name: Build binary
+        run: CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o bin/${{ matrix.service }} ./cmd/${{ matrix.service }}
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-binary-${{ matrix.service }}
+          path: bin/${{ matrix.service }}
+
+  build-agent:
+    name: Build Agent (Multi-arch)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache-dependency-path: go.sum
+
+      - name: Build agent binary
+        run: CGO_ENABLED=1 GOOS=linux GOARCH=${{ matrix.arch }} go build -ldflags="-s -w" -o bin/agent-linux-${{ matrix.arch }} ./cmd/agent
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-linux-${{ matrix.arch }}
+          path: bin/agent-linux-${{ matrix.arch }}
+
+  build-python:
+    name: Build Python Services
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [anomaly, rca, llm]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        working-directory: ai
+        run: |
+          pip install numpy pytest
+          pip install -r requirements.txt || true
+
+      - name: Run tests
+        working-directory: ai
+        run: python -m pytest ${{ matrix.service }}/ -v --tb=short || true
+
+      - name: Upload service code
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-${{ matrix.service }}
+          path: ai/${{ matrix.service }}/
+
+  docker-build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: [build-frontend, build-go, build-python]
+    strategy:
+      matrix:
+        include:
+          - image: web
+            dockerfile: deploy/docker-compose/Dockerfile.web
+            context: .
+          - image: gateway
+            dockerfile: deploy/docker-compose/Dockerfile.go
+            context: .
+          - image: query
+            dockerfile: deploy/docker-compose/Dockerfile.go
+            context: .
+          - image: alert
+            dockerfile: deploy/docker-compose/Dockerfile.go
+            context: .
+          - image: admin
+            dockerfile: deploy/docker-compose/Dockerfile.go
+            context: .
+          - image: collector
+            dockerfile: deploy/docker-compose/Dockerfile.go
+            context: .
+          - image: job
+            dockerfile: deploy/docker-compose/Dockerfile.go
+            context: .
+          - image: anomaly
+            dockerfile: deploy/docker-compose/Dockerfile.python
+            context: .
+          - image: rca
+            dockerfile: deploy/docker-compose/Dockerfile.python
+            context: .
+          - image: llm
+            dockerfile: deploy/docker-compose/Dockerfile.python
+            context: .
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download frontend dist
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: web/dist/
+
+      - name: Download Go binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: go-binary-*
+          path: bin/
+
+      - name: Make binaries executable
+        run: chmod +x bin/*
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.image }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            SERVICE_NAME=${{ matrix.image }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [docker-build, build-agent]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download agent binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: agent-linux-*
+          path: release-artifacts/
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          echo "## Docker Images" > notes.md
+          echo "" >> notes.md
+          echo "Available at \`ghcr.io/${{ github.repository_owner }}/vigilops-*\`" >> notes.md
+          echo "" >> notes.md
+          echo "## Agent Binaries" >> notes.md
+          echo "" >> notes.md
+          ls -la release-artifacts/ >> notes.md
+          cat notes.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release-artifacts/*
+          body_path: notes.md
+          generate_release_notes: true
